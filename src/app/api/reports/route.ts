@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { civicStore } from '@/lib/store';
-import { generateMockAddress, calculateGeodesicDistanceMeters } from '@/lib/spatial';
+import { calculateGeodesicDistanceMeters } from '@/lib/spatial';
+import { reverseGeocode, formatAddress, type ReverseGeocodeResult } from '@/lib/geocoding';
 import { calculatePriorityScore } from '@/lib/scoring';
 import { analyzeReportPhoto } from '@/lib/gemini';
 import { storeImageDataUrl } from '@/lib/objectStore';
-import { CreateReportRequest, Issue, IssueReport } from '@/lib/types';
+import { CreateReportRequest, Issue, IssueReport, LocationDetails } from '@/lib/types';
 import { getSession, unauthorized } from '@/lib/auth';
 import { departmentForCategory } from '@/lib/departments';
 import { slaDeadlineFor } from '@/lib/workflow';
@@ -88,6 +89,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Resolve the address server-side rather than trusting the client label.
+    // The citizen's browser already reverse-geocodes for display, but that value
+    // is optional, can be stale, and never reaches this handler for a report
+    // filed without it. A geocoder outage must not block a report, so a failure
+    // degrades to coordinates instead of rejecting the submission.
+    let resolvedGeo: ReverseGeocodeResult | null = null;
+    try {
+      resolvedGeo = await reverseGeocode(body.latitude, body.longitude);
+    } catch (err) {
+      console.error('[Reports] Reverse geocode failed, using coordinate-only address:', err);
+    }
+
+    // Prefer the geocoder, fall back to whatever the client resolved.
+    const locationDetails: LocationDetails = {
+      state: resolvedGeo?.state ?? body.locationDetails?.state,
+      district: resolvedGeo?.district ?? body.locationDetails?.district,
+      mandal: resolvedGeo?.mandal ?? body.locationDetails?.mandal,
+      pincode: resolvedGeo?.pincode ?? body.locationDetails?.pincode,
+    };
+
     // The photo has now been analysed and accepted, so it is safe to move the
     // bytes out of the request and into object storage. Deliberately after the
     // ML gate: a rejected or spammy upload should not leave an orphan object
@@ -123,7 +144,7 @@ export async function POST(req: NextRequest) {
         citizenNotes: body.citizenNotes,
         transcript: body.transcript,
         exif,
-        locationDetails: body.locationDetails,
+        locationDetails,
         createdAt: new Date().toISOString(),
       };
 
@@ -175,7 +196,7 @@ export async function POST(req: NextRequest) {
       citizenNotes: body.citizenNotes,
       transcript: body.transcript,
       exif,
-      locationDetails: body.locationDetails,
+      locationDetails,
       createdAt: new Date().toISOString(),
     };
 
@@ -187,11 +208,15 @@ export async function POST(req: NextRequest) {
       description: body.citizenNotes || `Citizen reported ${category.name.toLowerCase()} requiring municipal attention.`,
       latitude: body.latitude,
       longitude: body.longitude,
-      formattedAddress: generateMockAddress(body.latitude, body.longitude),
-      locationDetails: body.locationDetails,
+      formattedAddress: formatAddress(
+        resolvedGeo,
+        body.latitude,
+        body.longitude
+      ),
+      locationDetails,
       departmentId: dept.id,
-      jurisdictionCode: body.locationDetails?.mandal || body.locationDetails?.pincode,
-      state: body.locationDetails?.state,
+      jurisdictionCode: locationDetails.mandal || locationDetails.pincode,
+      state: locationDetails.state,
       citizenUserId: user.userId,
       citizenName: user.name,
       slaDeadlineAt: slaDeadlineFor(dept.slaHours),

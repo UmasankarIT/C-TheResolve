@@ -64,17 +64,3 @@ export function findNearbyActiveIssue(
 
   return closest;
 }
-
-/**
- * Approximate Reverse Geocoder for human-friendly street labels based on coordinates
- */
-export function generateMockAddress(lat: number, lng: number): string {
-  const sectors = ['Main Bazaar Road', 'Railway Station Road', 'Bus Stand Road', 'National Highway Service Road', 'Ring Road', 'Village Main Road'];
-  const landmarks = ['Near Bus Stand', 'Opposite Primary Health Centre', 'Near Anganwadi Centre', 'At Village Entrance', 'Near Water Tank', 'Opposite Gram Panchayat Office'];
-  
-  const hash = Math.abs(Math.floor(lat * 1000 + lng * 1000));
-  const sector = sectors[hash % sectors.length];
-  const landmark = landmarks[hash % landmarks.length];
-
-  return `${landmark}, ${sector}`;
-}
