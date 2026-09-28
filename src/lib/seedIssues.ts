@@ -18,6 +18,15 @@ export interface SeedCity {
 // government would actually pilot CivicResolve in — a whole state, not a
 // sample. Coordinates are HQ points and `wardName` is a representative
 // locality, not the official AP ward/delimitation list.
+//
+// The additional states below are a deliberate contrast: several districts each,
+// not full coverage. The point of including them is to exercise the multi-state
+// machinery — the indexed `state` column, cross-state demand rollups, and the
+// national summary's state ranking — which a single-state dataset can never
+// demonstrate. Claiming exhaustive coverage for these would mean listing 31
+// Karnataka and 33 Telangana districts, most of them with no realistic
+// coordinates worth seeding. Andhra Pradesh is the reference pilot; these show
+// the platform generalises.
 export const SEED_CITIES: SeedCity[] = [
   { city: 'Anantapur', state: 'Andhra Pradesh', district: 'Anantapur', lat: 14.6819, lng: 77.6006, wardCode: 'ATP', wardName: 'Court Road' },
   { city: 'Tirupati', state: 'Andhra Pradesh', district: 'Tirupati', lat: 13.6288, lng: 79.4192, wardCode: 'TPT', wardName: 'Sarakalavari' },
@@ -32,6 +41,25 @@ export const SEED_CITIES: SeedCity[] = [
   { city: 'Visakhapatnam', state: 'Andhra Pradesh', district: 'Visakhapatnam', lat: 17.6868, lng: 83.2185, wardCode: 'VZM', wardName: 'MVP Colony' },
   { city: 'Vizianagaram', state: 'Andhra Pradesh', district: 'Vizianagaram', lat: 18.1132, lng: 83.5977, wardCode: 'VZN', wardName: 'Fort Area' },
   { city: 'Kadapa', state: 'Andhra Pradesh', district: 'YSR Kadapa', lat: 14.4674, lng: 78.8241, wardCode: 'KDP', wardName: 'YSR Statue' },
+
+  // --- Karnataka ---
+  { city: 'Bengaluru', state: 'Karnataka', district: 'Bengaluru Urban', lat: 12.9716, lng: 77.5946, wardCode: 'BLR', wardName: 'Koramangala' },
+  { city: 'Mysuru', state: 'Karnataka', district: 'Mysuru', lat: 12.2958, lng: 76.6394, wardCode: 'MYS', wardName: 'Gandhi Bazaar' },
+  { city: 'Hubballi', state: 'Karnataka', district: 'Dharwad', lat: 15.3647, lng: 75.124, wardCode: 'DHW', wardName: 'Market Yard' },
+  { city: 'Mangaluru', state: 'Karnataka', district: 'Dakshina Kannada', lat: 12.9141, lng: 74.856, wardCode: 'DKD', wardName: 'Bendorewell' },
+
+  // --- Telangana ---
+  { city: 'Hyderabad', state: 'Telangana', district: 'Hyderabad', lat: 17.385, lng: 78.4867, wardCode: 'HYD', wardName: 'Banjara Hills' },
+  { city: 'Warangal', state: 'Telangana', district: 'Warangal', lat: 17.9689, lng: 79.5941, wardCode: 'WGL', wardName: 'Kakatiya Nagar' },
+  { city: 'Nizamabad', state: 'Telangana', district: 'Nizamabad', lat: 18.6725, lng: 78.094, wardCode: 'NZB', wardName: 'Vasantha Nagar' },
+
+  // --- Maharashtra ---
+  { city: 'Mumbai', state: 'Maharashtra', district: 'Mumbai Suburban', lat: 19.076, lng: 72.8777, wardCode: 'MUM', wardName: 'Andheri West' },
+  { city: 'Pune', state: 'Maharashtra', district: 'Pune', lat: 18.5204, lng: 73.8567, wardCode: 'PNQ', wardName: 'Kothrud' },
+  { city: 'Nagpur', state: 'Maharashtra', district: 'Nagpur', lat: 21.1458, lng: 79.0882, wardCode: 'NAG', wardName: 'Dharampeth' },
+
+  // --- National Capital Territory (union territory, single district) ---
+  { city: 'New Delhi', state: 'Delhi', district: 'New Delhi', lat: 28.6139, lng: 77.209, wardCode: 'DEL', wardName: 'Connaught Place' },
 ];
 
 interface CategoryProfile {

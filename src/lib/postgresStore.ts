@@ -383,7 +383,15 @@ export class PostgresStore implements CivicStore {
         );
       }
       await client.query('COMMIT');
-      console.log(`[store] Seeded ${seeds.length} sample grievances across ${SEED_CITIES.length} ${SEED_CITIES[0].state} districts`);
+      // Count the states actually present rather than naming SEED_CITIES[0]'s
+      // state, which read as "24 Andhra Pradesh districts" once other states
+      // were added and was quietly wrong.
+      const seededStates = new Set(SEED_CITIES.map((c) => c.state));
+      const seededDistricts = new Set(SEED_CITIES.map((c) => `${c.state}|${c.district}`));
+      console.log(
+        `[store] Seeded ${seeds.length} sample grievances across ${seededDistricts.size} districts in ${seededStates.size} states ` +
+          `(${Array.from(seededStates).join(', ')})`
+      );
     } catch (err) {
       try {
         await client.query('ROLLBACK');
