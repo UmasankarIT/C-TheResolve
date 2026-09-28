@@ -4,6 +4,15 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Issue, IssueStatus, Category, Department, AuthUser } from '@/lib/types';
 import { StatusPill } from './StatusPill';
 import {
+  Hotspot,
+  HotspotsData,
+  NationalSummary,
+  StateDemand,
+  DistrictDemand,
+  CategoryDemand as CategoryDemandRow,
+  ProjectRecommendation as Recommendation,
+} from '@/lib/demand';
+import {
   Search,
   CheckCircle2,
   XCircle,
@@ -67,95 +76,6 @@ type AnalyticsData = {
   byDepartment: Record<string, { name: string; open: number; avgHours: number; slaBreaches: number; resolved: number }>;
   slaBreachedIssues: { id: string; title: string; departmentId?: string; status: IssueStatus; slaDeadlineAt?: string }[];
   recentAudit: { id: string; actorName: string; role: string; action: string; detail: string; createdAt: string }[];
-};
-
-type Hotspot = {
-  id: string;
-  centroidLat: number;
-  centroidLng: number;
-  issueCount: number;
-  totalUpvotes: number;
-  avgPriority: number;
-  avgSeverity: number;
-  topCategories: { id: string; name: string; count: number }[];
-  leadingIssueId: string;
-  leadingIssueTitle: string;
-  areaName: string;
-  state: string;
-  district: string;
-  demandScore: number;
-  radiusMeters: number;
-};
-
-type Recommendation = {
-  rank: number;
-  title: string;
-  hotspotId: string;
-  category: string;
-  department: string;
-  demandScore: number;
-  rationale: string;
-  estimatedImpact: string;
-  indicativeInvestment: string;
-  priority: string;
-};
-
-type CategoryDemandRow = { id: string; name: string; openCount: number; totalUpvotes: number; avgSeverity: number };
-
-type StateDemand = {
-  state: string;
-  districts: string[];
-  openCount: number;
-  totalUpvotes: number;
-  avgSeverity: number;
-  hotspotCount: number;
-  topCategories: { id: string; name: string; count: number }[];
-  riskLabel: string;
-  pressureScore: number;
-};
-
-type NationalSummary = {
-  totalOpen: number;
-  totalUpvotes: number;
-  totalHotspots: number;
-  statesCovered: number;
-  districtsCovered: number;
-  leadingState: string;
-  leadingStateScore: number;
-  leadingCategory: string;
-  urgentStates: number;
-  investmentFocus: string;
-};
-
-type DistrictDemand = {
-  district: string;
-  state: string;
-  openCount: number;
-  totalUpvotes: number;
-  avgSeverity: number;
-  hotspotCount: number;
-  topCategories: { id: string; name: string; count: number }[];
-  pressureScore: number;
-};
-
-type HotspotsData = {
-  generatedAt: string;
-  mode: 'gemini' | 'heuristic';
-  dataSources: string[];
-  counts: {
-    totalOpen: number;
-    totalResolved: number;
-    totalUpvotes: number;
-    hotspotCount: number;
-    stateCount: number;
-    districtCount: number;
-  };
-  hotspots: Hotspot[];
-  recommendations: Recommendation[];
-  categoryDemand: CategoryDemandRow[];
-  stateDemand: StateDemand[];
-  districtDemand: DistrictDemand[];
-  national: NationalSummary;
 };
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ user, issues, categories, onStatusUpdate, onMerge }) => {

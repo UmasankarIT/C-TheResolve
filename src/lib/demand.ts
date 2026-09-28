@@ -1,4 +1,5 @@
 import { Issue, Department } from './types';
+import type { DistrictIndicators } from './publicData';
 
 /**
  * State an issue belongs to. Prefers the indexed `state` column, falling back to
@@ -8,7 +9,7 @@ import { Issue, Department } from './types';
  */
 function stateOf(issue: Issue | undefined): string | undefined {
   if (!issue) return undefined;
-  return issue.state || stateOf(issue) || undefined;
+  return issue.state || issue.locationDetails?.state || undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +152,37 @@ export interface ProjectRecommendation {
   estimatedImpact: string;
   indicativeInvestment: string;
   priority: 'high' | 'medium' | 'low';
+}
+
+/**
+ * Response envelope of GET /api/admin/hotspots. Declared here rather than in the
+ * consuming component so the admin console and the route that builds this payload
+ * cannot drift apart.
+ */
+export interface HotspotsData {
+  generatedAt: string;
+  mode: 'gemini' | 'heuristic';
+  dataSources: string[];
+  counts: {
+    totalOpen: number;
+    totalResolved: number;
+    totalUpvotes: number;
+    hotspotCount: number;
+    stateCount: number;
+    districtCount: number;
+  };
+  hotspots: Hotspot[];
+  recommendations: ProjectRecommendation[];
+  categoryDemand: CategoryDemand[];
+  stateDemand: StateDemand[];
+  districtDemand: DistrictDemand[];
+  national: NationalSummary;
+  /**
+   * Always present, empty when data.gov.in is unconfigured. The admin console
+   * does not read it yet, but it is part of the response and belongs in the
+   * envelope so the two stay honest about each other.
+   */
+  publicData: { indicators: DistrictIndicators[]; source: string | null };
 }
 
 // Static contextual datasets (lightweight substitute for live government

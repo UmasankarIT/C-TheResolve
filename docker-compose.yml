@@ -47,13 +47,6 @@ services:
       timeout: 5s
       retries: 5
 
-  civic-redis:
-    image: redis:7-alpine
-    container_name: civicresolve_redis
-    restart: unless-stopped
-    ports:
-      - "6380:6379"
-
   civic-minio:
     image: minio/minio:latest
     container_name: civicresolve_storage

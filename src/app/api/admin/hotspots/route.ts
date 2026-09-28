@@ -10,6 +10,7 @@ import {
   buildRecommendations,
   buildPromptContext,
   isOpenIssue,
+  type HotspotsData,
 } from '@/lib/demand';
 import { generateDemandRecommendations } from '@/lib/gemini';
 import { getDistrictIndicators } from '@/lib/publicData';
@@ -77,7 +78,10 @@ export async function GET(req: NextRequest) {
   // curated baseline — the endpoint never fails because of an external feed.
   const publicData = await getDistrictIndicators(districtDemand.map((d) => d.district));
 
-  return NextResponse.json({
+  // Annotated so the response the console consumes and the response actually
+  // built here cannot drift: adding a field to one without the other is a
+  // compile error rather than an undefined at runtime.
+  const body: HotspotsData = {
     generatedAt: new Date().toISOString(),
     mode,
     dataSources: [
@@ -103,5 +107,7 @@ export async function GET(req: NextRequest) {
     districtDemand,
     publicData,
     national,
-  });
+  };
+  return NextResponse.json(body);
 }
+
