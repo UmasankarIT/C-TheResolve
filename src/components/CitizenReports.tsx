@@ -38,7 +38,7 @@ export const CitizenReports: React.FC<CitizenReportsProps> = ({ user, issues, on
           <Inbox className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
           <p className="mt-3 text-sm font-semibold">No reports yet</p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Tap <b>Report Hazard</b> — snap a photo, pin the exact spot, and we'll route it to the right department.
+            Tap <b>Report Hazard</b> &mdash; snap a photo, pin the exact spot, and we&apos;ll route it to the right department.
           </p>
         </div>
       )}

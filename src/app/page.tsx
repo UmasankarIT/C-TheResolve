@@ -57,8 +57,14 @@ export default function HomePage() {
   // reports come from a separate endpoint that scopes by the session rather than
   // the client filtering the whole feed. Re-fetched whenever the identity
   // changes so a fresh sign-in and a sign-out cannot show stale rows.
+  // Depend on the primitive fields rather than the session object: the session
+  // is replaced wholesale on every refresh, so depending on it would refetch on
+  // every poll instead of only when the signed-in identity actually changes.
+  const sessionUserId = session?.userId;
+  const sessionRole = session?.role;
+
   useEffect(() => {
-    if (!session || session.role !== 'citizen') {
+    if (!sessionUserId || sessionRole !== 'citizen') {
       setMyReports([]);
       return;
     }
@@ -72,7 +78,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [session?.userId]);
+  }, [sessionUserId, sessionRole]);
 
   // Refetch the unread badge whenever the identity changes
   const refreshNotifications = useCallback(async () => {

@@ -5,7 +5,14 @@ const EARTH_RADIUS_METERS = 6371008.8; // WGS 84 mean radius
 
 /**
  * Calculates geodesic distance between two WGS 84 points using the Haversine formula.
- * Accurately mirrors PostGIS ST_Distance(geography, geography).
+ *
+ * Spherical: this matches PostGIS ST_Distance(geography, geography,
+ * use_spheroid => false) to the metre (verified 499993.9m for
+ * Hyderabad -> Bengaluru). It is NOT identical to PostGIS's default, which uses
+ * the WGS84 ellipsoid and returns 497661.8m for the same pair -- about 0.47%
+ * lower. The two stores therefore disagree slightly at the very edge of the
+ * dedup radius, by roughly 0.12m at 25m, which is well inside GPS accuracy and
+ * not worth the cost of implementing the ellipsoid here.
  */
 export function calculateGeodesicDistanceMeters(
   lat1: number,
