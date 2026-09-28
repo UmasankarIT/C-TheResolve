@@ -2,6 +2,19 @@
 -- CivicResolve: Production PostgreSQL + PostGIS Database Schema
 -- Spatial Issue Tracking, Deduplication, and Prioritization Engine
 -- ====================================================================
+--
+-- NOTE: this file is a DESIGN REFERENCE, not the schema the running app
+-- creates. The authoritative schema is database/migrations/*.sql, which
+-- the store applies in filename order on boot and which is what the
+-- PostGIS queries in src/lib/postgresStore.ts are written against.
+--
+-- The two have drifted apart (this reference still uses pre-Postgres-store
+-- column names such as voice_note_url, exif_location and user_comment).
+-- Treat database/migrations/ as the single source of truth.
+--
+-- In particular, no table stores a voice recording: only the transcript
+-- is persisted. See migrations/0002_stop_retaining_voice_recordings.sql.
+-- ====================================================================
 
 -- 1. Enable Required Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -121,11 +134,10 @@ CREATE TABLE IF NOT EXISTS issues (
     ml_severity_score NUMERIC(3, 2) DEFAULT 1.00 CHECK (ml_severity_score >= 1.00 AND ml_severity_score <= 5.00),
     
     -- Dynamic Prioritization Score
-    -- Formula: (ML_Severity * 0.35) + (log(Report_Count + 1) * 0.30) + (Community_Upvotes * 0.20) + (Urgency_Decay_Factor * 0.15)
+    -- Formula: (ML_Severity * 0.35) + (log10(Report_Count + 1) * 0.30) + (Community_Upvotes * 0.20) + (Urgency_Decay_Factor * 0.15)
     priority_score NUMERIC(6, 3) NOT NULL DEFAULT 1.000,
     
-    -- Voice note (recorded by the citizen, uploaded with the report)
-    voice_note_url TEXT,                    -- audio clip (data URL)
+    -- Voice note transcription. The audio clip itself is NEVER stored.
     voice_note_transcript TEXT,             -- transcription, fed to ML analysis
     
     -- Resolution Metadata
@@ -165,8 +177,7 @@ CREATE TABLE IF NOT EXISTS issue_reports (
     exif_verified BOOLEAN DEFAULT FALSE,
     
     user_comment TEXT,
-    voice_note_url TEXT,             -- per-report audio clip
-    voice_note_transcript TEXT,      -- transcription (fed to ML)
+    voice_note_transcript TEXT,      -- transcription only (fed to ML); audio is never retained
     device_info JSONB, -- User agent, OS, client IP hash
     
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP

@@ -83,18 +83,13 @@ export const CitizenReports: React.FC<CitizenReportsProps> = ({ user, issues, on
             </div>
           </button>
 
-          {/* Voice note: clip + transcript, understood by the pipeline */}
-          {(issue.audioUrl || issue.transcript) && (
+          {/* Voice note transcript — the recording itself is never stored */}
+          {issue.transcript && (
             <div className="mx-3 mb-2 px-3 py-2 rounded-2xl bg-emerald-50/70 border border-emerald-200/70 dark:bg-emerald-500/5 dark:border-emerald-500/20">
-              {issue.transcript && (
-                <p className="text-[11px] text-emerald-900 dark:text-emerald-300 flex items-start space-x-1.5">
-                  <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                  <span className="italic">“{issue.transcript}”</span>
-                </p>
-              )}
-              {issue.audioUrl && (
-                <audio controls src={issue.audioUrl} className="w-full h-8 mt-1.5" preload="metadata" />
-              )}
+              <p className="text-[11px] text-emerald-900 dark:text-emerald-300 flex items-start space-x-1.5">
+                <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span className="italic">“{issue.transcript}”</span>
+              </p>
             </div>
           )}
 

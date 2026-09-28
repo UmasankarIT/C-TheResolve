@@ -174,17 +174,13 @@ function TaskCard({
         </div>
       </button>
 
-      {(issue.audioUrl || issue.transcript) && (
+      {/* Voice note transcript — the recording itself is never stored */}
+      {issue.transcript && (
         <div className="mx-3 mb-2 px-3 py-2 rounded-2xl bg-sky-50/70 border border-sky-200/70 dark:bg-sky-500/5 dark:border-sky-500/20">
-          {issue.transcript && (
-            <p className="text-[11px] text-sky-900 dark:text-sky-300 flex items-start space-x-1.5">
-              <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-              <span className="italic">“{issue.transcript}”</span>
-            </p>
-          )}
-          {issue.audioUrl && (
-            <audio controls src={issue.audioUrl} className="w-full h-8 mt-1.5" preload="metadata" />
-          )}
+          <p className="text-[11px] text-sky-900 dark:text-sky-300 flex items-start space-x-1.5">
+            <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span className="italic">“{issue.transcript}”</span>
+          </p>
         </div>
       )}
 

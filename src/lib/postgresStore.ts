@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { CivicStore, IssueStatusUpdate, ReassignRequest } from './civicStore';
@@ -41,7 +41,6 @@ interface IssueRow {
   slaDeadlineAt: Date | null;
   verifiedAt: Date | null;
   mergedIntoId: string | null;
-  audioUrl: string | null;
   transcript: string | null;
   reportCount: number;
   upvotesCount: number;
@@ -77,7 +76,6 @@ interface ReportRow {
   isOnSite: boolean;
   imageUrl: string;
   citizenNotes: string | null;
-  audioUrl: string | null;
   transcript: string | null;
   exif: IssueReport['exif'] | null;
   locationDetails: IssueReport['locationDetails'] | null;
@@ -105,7 +103,6 @@ const ISSUE_SELECT = `
     i.sla_deadline_at AS "slaDeadlineAt",
     i.verified_at AS "verifiedAt",
     i.merged_into_id AS "mergedIntoId",
-    i.audio_url AS "audioUrl",
     i.transcript,
     i.report_count AS "reportCount",
     i.upvotes_count AS "upvotesCount",
@@ -144,7 +141,6 @@ const REPORT_SELECT = `
     is_on_site AS "isOnSite",
     image_url AS "imageUrl",
     citizen_notes AS "citizenNotes",
-    audio_url AS "audioUrl",
     transcript,
     exif,
     location_details AS "locationDetails",
@@ -192,7 +188,6 @@ function toIssue(r: IssueRow): Issue {
     verifiedAt: iso(r.verifiedAt),
     mergedIntoId: r.mergedIntoId ?? undefined,
     reassignRequest: r.reassignRequest ?? undefined,
-    audioUrl: r.audioUrl ?? undefined,
     transcript: r.transcript ?? undefined,
     proof: r.proof ?? undefined,
     reportCount: Number(r.reportCount),
@@ -221,7 +216,6 @@ function toReport(r: ReportRow): IssueReport {
     isOnSite: r.isOnSite,
     imageUrl: r.imageUrl,
     citizenNotes: r.citizenNotes ?? undefined,
-    audioUrl: r.audioUrl ?? undefined,
     transcript: r.transcript ?? undefined,
     exif: r.exif ?? undefined,
     locationDetails: r.locationDetails ?? undefined,
@@ -263,12 +257,19 @@ export class PostgresStore implements CivicStore {
   }
 
   private async _init(): Promise<void> {
-    const migrationPath = join(process.cwd(), 'database', 'migrations', '0001_init.sql');
-    const sql = readFileSync(migrationPath, 'utf8');
-    await this.q(sql);
+    // Apply every migration in filename order. Each file is written to be
+    // idempotent, so re-running the whole set on an existing database is safe.
+    const migrationsDir = join(process.cwd(), 'database', 'migrations');
+    const files = readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort();
+    for (const file of files) {
+      const sql = readFileSync(join(migrationsDir, file), 'utf8');
+      await this.q(sql);
+    }
     await this._seed();
     await this._seedIssues();
-    console.log('[store] Postgres + PostGIS ready (migrated & seeded)');
+    console.log(`[store] Postgres + PostGIS ready (${files.length} migrations applied & seeded)`);
   }
 
   private async _seedIssues(): Promise<void> {
@@ -298,14 +299,14 @@ export class PostgresStore implements CivicStore {
              (id, category_id, title, description, location, formatted_address, ward_id,
               location_details, status, assigned_worker_name, assigned_department,
               department_id, jurisdiction_code, citizen_user_id, citizen_name,
-              sla_deadline_at, verified_at, merged_into_id, audio_url, transcript,
+              sla_deadline_at, verified_at, merged_into_id, transcript,
               report_count, upvotes_count, ml_severity_score, priority_score, image_url,
               ml_analysis, reassign_request, proof, resolution_notes, resolution_proof_url,
               resolved_at, created_at, updated_at)
            VALUES
-             ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, $8,
-              $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-              $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)`,
+              ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, $8,
+               $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+               $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
           [
             issue.id,
             issue.categoryId,
@@ -326,7 +327,6 @@ export class PostgresStore implements CivicStore {
             issue.slaDeadlineAt ?? null,
             issue.verifiedAt ?? null,
             issue.mergedIntoId ?? null,
-            issue.audioUrl ?? null,
             issue.transcript ?? null,
             issue.reportCount,
             issue.communityUpvotes,
@@ -501,14 +501,14 @@ export class PostgresStore implements CivicStore {
          (id, category_id, title, description, location, formatted_address, ward_id,
           location_details, status, assigned_worker_name, assigned_department,
           department_id, jurisdiction_code, citizen_user_id, citizen_name,
-          sla_deadline_at, verified_at, merged_into_id, audio_url, transcript,
+          sla_deadline_at, verified_at, merged_into_id, transcript,
           report_count, upvotes_count, ml_severity_score, priority_score, image_url,
           ml_analysis, reassign_request, proof, resolution_notes, resolution_proof_url,
           resolved_at, created_at, updated_at)
        VALUES
-         ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, $8,
-          $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-          $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)`,
+          ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, $8,
+           $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
       [
         issue.id,
         issue.categoryId,
@@ -529,7 +529,6 @@ export class PostgresStore implements CivicStore {
         issue.slaDeadlineAt ?? null,
         issue.verifiedAt ?? null,
         issue.mergedIntoId ?? null,
-        issue.audioUrl ?? null,
         issue.transcript ?? null,
         issue.reportCount,
         issue.communityUpvotes,
@@ -554,11 +553,11 @@ export class PostgresStore implements CivicStore {
     await this.q(
       `INSERT INTO issue_reports
          (id, issue_id, reporter_id, citizen_user_id, client_location, accuracy_meters,
-          is_on_site, image_url, citizen_notes, audio_url, transcript, exif,
+          is_on_site, image_url, citizen_notes, transcript, exif,
           location_details, created_at)
        VALUES
          ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7,
-          $8, $9, $10, $11, $12, $13, $14, $15)`,
+          $8, $9, $10, $11, $12, $13, $14)`,
       [
         report.id,
         report.issueId,
@@ -570,7 +569,6 @@ export class PostgresStore implements CivicStore {
         report.isOnSite,
         report.imageUrl,
         report.citizenNotes ?? null,
-        report.audioUrl ?? null,
         report.transcript ?? null,
         report.exif ?? null,
         report.locationDetails ?? null,

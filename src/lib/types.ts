@@ -132,7 +132,6 @@ export interface IssueReport {
   isOnSite: boolean;
   imageUrl: string;
   citizenNotes?: string;
-  audioUrl?: string;
   transcript?: string;
   exif?: ExifMetadata;
   locationDetails?: LocationDetails;
@@ -161,8 +160,7 @@ export interface Issue {
   verifiedAt?: string;
   mergedIntoId?: string;
   reassignRequest?: { byDepartment: string; reason: string; at: string };
-  audioUrl?: string;             // citizen voice note clip
-  transcript?: string;           // transcription of the voice note
+  transcript?: string;           // transcription of the voice note (the recording itself is never stored)
   proof?: ProofOfWork;           // field staff proof of work
   reportCount: number;
   communityUpvotes: number;
@@ -187,7 +185,6 @@ export interface CreateReportRequest {
   imageUrl: string;
   title?: string;
   citizenNotes?: string;
-  audioUrl?: string;
   transcript?: string;
   exif?: ExifMetadata;
   locationDetails?: LocationDetails;

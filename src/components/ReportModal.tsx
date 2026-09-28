@@ -304,7 +304,6 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         isOnSite: location.isOnSite,
         imageUrl,
         citizenNotes: notes,
-        audioUrl: voiceNote?.audioUrl,
         transcript: voiceNote?.transcript || undefined,
         exif,
         locationDetails: location.locationDetails,
@@ -574,7 +573,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1.5">
                         <Mic className="w-3.5 h-3.5" />
-                        <span>Voice note ready — the clip & transcript ship with your report</span>
+                        <span>Voice note ready — saved as a transcript only; the recording is discarded</span>
                       </span>
                       <button
                         type="button"
