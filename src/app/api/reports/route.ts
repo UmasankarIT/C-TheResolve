@@ -191,6 +191,7 @@ export async function POST(req: NextRequest) {
       locationDetails: body.locationDetails,
       departmentId: dept.id,
       jurisdictionCode: body.locationDetails?.mandal || body.locationDetails?.pincode,
+      state: body.locationDetails?.state,
       citizenUserId: user.userId,
       citizenName: user.name,
       slaDeadlineAt: slaDeadlineFor(dept.slaHours),

@@ -1,5 +1,16 @@
 import { Issue, Department } from './types';
 
+/**
+ * State an issue belongs to. Prefers the indexed `state` column, falling back to
+ * the locationDetails JSONB for issues written before the column existed.
+ * Returns undefined rather than a placeholder so callers keep control of their
+ * own "Unknown" labelling.
+ */
+function stateOf(issue: Issue | undefined): string | undefined {
+  if (!issue) return undefined;
+  return issue.state || stateOf(issue) || undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Demand Intelligence — fuses citizen grievance data with contextual data to
 // surface demand hotspots and recommend priority public projects.
@@ -76,10 +87,10 @@ export function buildDistrictDemand(issues: Issue[], hotspots: Hotspot[]): Distr
   for (const issue of issues) {
     const district = issue.locationDetails?.district;
     if (!district) continue;
-    const key = `${issue.locationDetails?.state || 'Unknown'}|${district}`;
+    const key = `${stateOf(issue) || 'Unknown'}|${district}`;
     const bucket = byDistrict.get(key);
     if (bucket) bucket.issues.push(issue);
-    else byDistrict.set(key, { state: issue.locationDetails?.state || 'Unknown', issues: [issue] });
+    else byDistrict.set(key, { state: stateOf(issue) || 'Unknown', issues: [issue] });
   }
 
   const hotspotsByDistrict = new Map<string, number>();
@@ -240,7 +251,8 @@ export function areaLabel(issue: Issue): string {
   if (issue.wardId) return issue.wardId;
   if (issue.locationDetails?.district) return issue.locationDetails.district;
   if (issue.locationDetails?.mandal) return issue.locationDetails.mandal;
-  if (issue.locationDetails?.state) return issue.locationDetails.state;
+  const state = stateOf(issue);
+  if (state) return state;
   return 'Ward';
 }
 
@@ -311,7 +323,7 @@ export function buildHotspots(issues: Issue[]): Hotspot[] {
         leadingIssueId: leading.id,
         leadingIssueTitle: leading.title,
         areaName: areaLabel(leading),
-        state: leading.locationDetails?.state || 'Unknown',
+        state: stateOf(leading) || 'Unknown',
         district: leading.locationDetails?.district || 'Unknown',
         demandScore,
         radiusMeters,
@@ -345,7 +357,7 @@ export function buildStateDemand(issues: Issue[], hotspots: Hotspot[]): StateDem
 
   const byState = new Map<string, Issue[]>();
   for (const issue of issues) {
-    const state = issue.locationDetails?.state || 'Unknown';
+    const state = stateOf(issue) || 'Unknown';
     const bucket = byState.get(state);
     if (bucket) bucket.push(issue);
     else byState.set(state, [issue]);
@@ -456,7 +468,7 @@ export function buildRecommendations(
   return hotspots.slice(0, 8).map((hs, i) => {
     const top = hs.topCategories[0];
     const fundamental = issues.find((i) => i.id === hs.leadingIssueId);
-    const stateName = fundamental?.locationDetails?.state;
+    const stateName = (fundamental ? stateOf(fundamental) : undefined);
     const risk = (stateName && CONTEXTUAL_RISK[stateName]) || DEFAULT_RISK;
     const buildTitle = PROJECT_TEMPLATES[top.id.replace('cat-', '')] || ((a) => `Integrated civic asset repair programme in ${a}`);
 
@@ -495,7 +507,7 @@ export function buildPromptContext(
 ): string {
   const stateCounts = new Map<string, number>();
   for (const i of issues) {
-    const s = i.locationDetails?.state || 'Unknown';
+    const s = stateOf(i) || 'Unknown';
     stateCounts.set(s, (stateCounts.get(s) || 0) + 1);
   }
 

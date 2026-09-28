@@ -269,6 +269,11 @@ export function buildSeedIssues(seed = 20260925): Issue[] {
         district: city.district,
         mandal: city.wardName,
       },
+      // Set directly rather than relying on the migration backfill: seeds are
+      // deleted and re-inserted on refresh, which runs after migrations, so a
+      // backfill alone would be discarded every time the dataset is rebuilt.
+      state: city.state,
+      jurisdictionCode: city.wardName,
       status,
       citizenUserId: `usr-seed-${slugify(city.city)}-${seq}`,
       citizenName,

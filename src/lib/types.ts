@@ -152,8 +152,9 @@ export interface Issue {
   status: IssueStatus;
   assignedWorkerName?: string;
   assignedDepartment?: string;
-  departmentId?: string;         // routing target (DEPT_*)
-  jurisdictionCode?: string;     // ward/block scope
+    departmentId?: string;         // routing target (DEPT_*)
+    jurisdictionCode?: string;     // ward/block scope
+    state?: string;                // administrative state, promoted out of locationDetails for querying
   citizenUserId?: string;        // who reported it (for "My Reports")
   citizenName?: string;
   slaDeadlineAt?: string;        // SLA timer set on assignment

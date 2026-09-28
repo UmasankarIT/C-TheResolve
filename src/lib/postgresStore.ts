@@ -36,6 +36,7 @@ interface IssueRow {
   assignedDepartment: string | null;
   departmentId: string | null;
   jurisdictionCode: string | null;
+  state: string | null;
   citizenUserId: string | null;
   citizenName: string | null;
   slaDeadlineAt: Date | null;
@@ -98,6 +99,7 @@ const ISSUE_SELECT = `
     i.assigned_department AS "assignedDepartment",
     i.department_id AS "departmentId",
     i.jurisdiction_code AS "jurisdictionCode",
+    i.state,
     i.citizen_user_id AS "citizenUserId",
     i.citizen_name AS "citizenName",
     i.sla_deadline_at AS "slaDeadlineAt",
@@ -181,7 +183,8 @@ function toIssue(r: IssueRow): Issue {
     assignedWorkerName: r.assignedWorkerName ?? undefined,
     assignedDepartment: r.assignedDepartment ?? undefined,
     departmentId: r.departmentId ?? undefined,
-    jurisdictionCode: r.jurisdictionCode ?? undefined,
+      jurisdictionCode: r.jurisdictionCode ?? undefined,
+      state: r.state ?? undefined,
     citizenUserId: r.citizenUserId ?? undefined,
     citizenName: r.citizenName ?? undefined,
     slaDeadlineAt: iso(r.slaDeadlineAt),
@@ -332,15 +335,15 @@ export class PostgresStore implements CivicStore {
           `INSERT INTO issues
              (id, category_id, title, description, location, formatted_address, ward_id,
               location_details, status, assigned_worker_name, assigned_department,
-              department_id, jurisdiction_code, citizen_user_id, citizen_name,
+              department_id, jurisdiction_code, state, citizen_user_id, citizen_name,
               sla_deadline_at, verified_at, merged_into_id, transcript,
               report_count, upvotes_count, ml_severity_score, priority_score, image_url,
               ml_analysis, reassign_request, proof, resolution_notes, resolution_proof_url,
               resolved_at, created_at, updated_at)
            VALUES
               ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, $8,
-               $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-               $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
+               $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+               $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)`,
           [
             issue.id,
             issue.categoryId,
@@ -356,6 +359,7 @@ export class PostgresStore implements CivicStore {
             issue.assignedDepartment ?? null,
             issue.departmentId ?? null,
             issue.jurisdictionCode ?? null,
+            issue.state ?? null,
             issue.citizenUserId ?? null,
             issue.citizenName ?? null,
             issue.slaDeadlineAt ?? null,
@@ -572,15 +576,15 @@ export class PostgresStore implements CivicStore {
       `INSERT INTO issues
          (id, category_id, title, description, location, formatted_address, ward_id,
           location_details, status, assigned_worker_name, assigned_department,
-          department_id, jurisdiction_code, citizen_user_id, citizen_name,
+          department_id, jurisdiction_code, state, citizen_user_id, citizen_name,
           sla_deadline_at, verified_at, merged_into_id, transcript,
           report_count, upvotes_count, ml_severity_score, priority_score, image_url,
           ml_analysis, reassign_request, proof, resolution_notes, resolution_proof_url,
           resolved_at, created_at, updated_at)
        VALUES
           ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, $8,
-           $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
+           $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+           $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)`,
       [
         issue.id,
         issue.categoryId,
@@ -596,6 +600,7 @@ export class PostgresStore implements CivicStore {
         issue.assignedDepartment ?? null,
         issue.departmentId ?? null,
         issue.jurisdictionCode ?? null,
+        issue.state ?? null,
         issue.citizenUserId ?? null,
         issue.citizenName ?? null,
         issue.slaDeadlineAt ?? null,
