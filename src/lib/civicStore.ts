@@ -42,6 +42,21 @@ export interface CivicStore {
   hasUpvoted(userId: string, issueId: string): Promise<boolean>;
   recordUpvote(userId: string, issueId: string): Promise<boolean>;
 
+  /**
+   * Finds the nearest open issue of the same category within `thresholdMeters`,
+   * for spatial deduplication of incoming reports. Implementations must treat
+   * terminal statuses (resolved / merged / rejected) as non-matching.
+   *
+   * Postgres answers this with an indexed ST_DWithin query rather than loading
+   * the whole table, so report submission stays cheap as the dataset grows.
+   */
+  findNearbyActiveIssue(
+    latitude: number,
+    longitude: number,
+    categoryId: string,
+    thresholdMeters?: number
+  ): Promise<{ issue: Issue; distanceMeters: number } | null>;
+
   getDepartments(): Promise<Department[]>;
   getDepartmentById(id: string): Promise<Department | undefined>;
   upsertDepartment(dept: Department): Promise<Department>;

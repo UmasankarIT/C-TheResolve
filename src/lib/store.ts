@@ -8,6 +8,7 @@ import {
   ProofOfWork,
 } from './types';
 import { calculatePriorityScore } from './scoring';
+import { findNearbyActiveIssue } from './spatial';
 import { DEFAULT_DEPARTMENTS } from './departments';
 import { INITIAL_CATEGORIES } from './categories';
 import { buildSeedIssues } from './seedIssues';
@@ -147,6 +148,20 @@ class MemoryStore implements CivicStore {
     return (await this.getIssuesForDepartment(departmentId)).filter(
       (i) => i.status === 'assigned' || i.status === 'in_progress'
     );
+  }
+
+  /**
+   * In-memory counterpart of the Postgres ST_DWithin query. Correctness must
+   * match the SQL path exactly (same terminal-status handling, same 25m default)
+   * so switching stores cannot change deduplication behaviour.
+   */
+  async findNearbyActiveIssue(
+    latitude: number,
+    longitude: number,
+    categoryId: string,
+    thresholdMeters: number = 25
+  ): Promise<{ issue: Issue; distanceMeters: number } | null> {
+    return findNearbyActiveIssue(latitude, longitude, categoryId, await this.getIssues(), thresholdMeters);
   }
 
   // --- Proof of work ---

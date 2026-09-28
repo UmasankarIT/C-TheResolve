@@ -18,6 +18,18 @@ const ADJACENCY: Record<IssueStatus, IssueStatus[]> = {
 export type TransitionResult = { ok: boolean; reason?: string };
 
 /**
+ * Terminal statuses: the issue is closed and no longer counts as active civic
+ * demand. Centralised because this set had drifted into three separate
+ * hand-maintained copies (SLA checks, the citizen's "my reports" tab, and
+ * spatial dedup) that had already diverged on whether `merged` is terminal.
+ */
+export const TERMINAL_STATUSES: readonly IssueStatus[] = ['resolved', 'merged', 'rejected'];
+
+export function isTerminalStatus(status: IssueStatus): boolean {
+  return TERMINAL_STATUSES.includes(status);
+}
+
+/**
  * Assert a transition under the signed-in actor's role.
  *
  * - Citizen: never touches ticket state.
@@ -83,9 +95,9 @@ export function slaDeadlineFor(slaHours: number, now: Date = new Date()): string
 
 export function isSlaBreached(issue: Issue, now: Date = new Date()): boolean {
   if (!issue.slaDeadlineAt) return false;
-  if (issue.status === 'resolved' || issue.status === 'merged' || issue.status === 'rejected') {
-    return false;
-  }
+    if (isTerminalStatus(issue.status)) {
+      return false;
+    }
   return new Date(issue.slaDeadlineAt).getTime() < now.getTime();
 }
 

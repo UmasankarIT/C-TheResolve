@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { civicStore } from '@/lib/store';
-import { findNearbyActiveIssue, generateMockAddress, calculateGeodesicDistanceMeters } from '@/lib/spatial';
+import { generateMockAddress, calculateGeodesicDistanceMeters } from '@/lib/spatial';
 import { calculatePriorityScore } from '@/lib/scoring';
 import { analyzeReportPhoto } from '@/lib/gemini';
 import { storeImageDataUrl } from '@/lib/objectStore';
@@ -95,9 +95,15 @@ export async function POST(req: NextRequest) {
     // above, so nothing here changes the AI path.
     const storedImageUrl = await storeImageDataUrl(String(body.imageUrl || ''), 'issue');
 
-    // 3. PostGIS ST_DWithin Geodesic Deduplication Check (25m threshold)
-    const activeIssues = await civicStore.getIssues();
-    const match = findNearbyActiveIssue(body.latitude, body.longitude, category.id, activeIssues, 25.0);
+    // 3. Spatial dedup (25m threshold). The Postgres store answers this with an
+    // indexed ST_DWithin query, so submission cost does not grow with the
+    // size of the issues table.
+    const match = await civicStore.findNearbyActiveIssue(
+      body.latitude,
+      body.longitude,
+      category.id,
+      25.0
+    );
 
     const reportId = `rep-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 

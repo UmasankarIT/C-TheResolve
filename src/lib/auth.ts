@@ -17,10 +17,18 @@ if (process.env.NODE_ENV === 'production' && !process.env.CIVRES_JWT_SECRET) {
   );
 }
 
+// The Secure flag is tied to how the app is actually served, not to NODE_ENV.
+// Tying it to NODE_ENV alone made every non-TLS deployment unusable: the
+// container runs in production mode over plain http://localhost, so the browser
+// stored a Secure cookie and then refused to send it back, leaving nobody able
+// to sign in. Set SESSION_COOKIE_SECURE=false for any HTTP-served pilot; the
+// default stays Secure because production deployments sit behind TLS.
+const cookieSecureDefault = process.env.NODE_ENV === 'production';
+const cookieSecureRaw = process.env.SESSION_COOKIE_SECURE;
 export const SESSION_COOKIE_OPTS = {
   httpOnly: true,
   sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
+  secure: cookieSecureRaw === undefined ? cookieSecureDefault : cookieSecureRaw === 'true',
   path: '/',
   maxAge: 60 * 60 * 24 * 7, // 7 days
 };

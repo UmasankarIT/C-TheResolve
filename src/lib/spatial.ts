@@ -1,4 +1,5 @@
 import { Issue } from './types';
+import { isTerminalStatus } from './workflow';
 
 const EARTH_RADIUS_METERS = 6371008.8; // WGS 84 mean radius
 
@@ -46,6 +47,10 @@ export function isWithinProximity(
 
 /**
  * Finds existing active issue within spatial threshold for deduplication.
+ *
+ * In-memory reference implementation. The Postgres store answers the same
+ * question with an indexed ST_DWithin query instead of scanning in JS, so this
+ * is only reached when DATABASE_URL is unset.
  */
 export function findNearbyActiveIssue(
   lat: number,
@@ -59,7 +64,9 @@ export function findNearbyActiveIssue(
   for (const issue of issues) {
     // Only aggregate against active, unresolved issues with identical category
     if (issue.categoryId !== categoryId) continue;
-    if (issue.status === 'resolved' || issue.status === 'rejected') continue;
+    // Terminal means terminal, including `merged`: aggregating a fresh report
+    // into a merged issue would silently discard it from active demand.
+    if (isTerminalStatus(issue.status)) continue;
 
     const distance = calculateGeodesicDistanceMeters(lat, lng, issue.latitude, issue.longitude);
 

@@ -257,19 +257,53 @@ export class PostgresStore implements CivicStore {
   }
 
   private async _init(): Promise<void> {
-    // Apply every migration in filename order. Each file is written to be
-    // idempotent, so re-running the whole set on an existing database is safe.
+    // Apply each migration in filename order exactly once. Previously every file
+    // was re-run on every boot, which only worked because each one happened to
+    // be idempotent. Applied filenames are recorded in schema_migrations so a
+    // non-idempotent statement (ALTER TABLE ADD COLUMN without IF NOT EXISTS,
+    // a backfill, an UPDATE) can never silently run twice.
     const migrationsDir = join(process.cwd(), 'database', 'migrations');
     const files = readdirSync(migrationsDir)
       .filter((f) => f.endsWith('.sql'))
       .sort();
-    for (const file of files) {
-      const sql = readFileSync(join(migrationsDir, file), 'utf8');
-      await this.q(sql);
+
+    const pool = getPool();
+    const client = await pool.connect();
+    let applied = 0;
+    try {
+      await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
+        name TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`);
+      const done = await client.query<{ name: string }>('SELECT name FROM schema_migrations');
+      const appliedNames = new Set(done.rows.map((r) => r.name));
+
+      for (const file of files) {
+        if (appliedNames.has(file)) continue;
+        const sql = readFileSync(join(migrationsDir, file), 'utf8');
+        // One transaction per file: a failure part-way through leaves the file
+        // unrecorded and rolls back, so the next boot retries it cleanly.
+        await client.query('BEGIN');
+        try {
+          await client.query(sql);
+          await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file]);
+          await client.query('COMMIT');
+          applied++;
+          console.log(`[store] applied migration ${file}`);
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
+        }
+      }
+    } finally {
+      client.release();
     }
+
     await this._seed();
     await this._seedIssues();
-    console.log(`[store] Postgres + PostGIS ready (${files.length} migrations applied & seeded)`);
+    console.log(
+      `[store] Postgres + PostGIS ready (${applied} migration(s) applied, ${files.length} total, seeded)`
+    );
   }
 
   private async _seedIssues(): Promise<void> {
@@ -492,6 +526,44 @@ export class PostgresStore implements CivicStore {
     if (!rows[0]) return undefined;
     const issues = await this.attachReports([toIssue(rows[0])]);
     return issues[0];
+  }
+
+  /**
+   * Spatial dedup via the GiST index on issues.location.
+   *
+   * ST_DWithin against a geography column is index-accelerated, so this touches
+   * only the handful of candidate rows near the report instead of loading the
+   * whole table the way the previous getIssues()-then-loop-in-JS path did.
+   * Terminal statuses are excluded so a new report never aggregates into a
+   * resolved, merged or rejected issue.
+   */
+  async findNearbyActiveIssue(
+    latitude: number,
+    longitude: number,
+    categoryId: string,
+    thresholdMeters: number = 25
+  ): Promise<{ issue: Issue; distanceMeters: number } | null> {
+    await this.ensureReady();
+    const { rows } = await this.q<IssueRow & { distance_meters: number }>(
+      `SELECT *, ST_Distance(i.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
+              AS distance_meters
+         FROM issues i
+         JOIN categories c ON c.id = i.category_id
+        WHERE i.category_id = $3
+          AND i.status NOT IN ('resolved', 'merged', 'rejected')
+          AND ST_DWithin(
+                i.location,
+                ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+                $4
+              )
+        ORDER BY distance_meters ASC
+        LIMIT 1`,
+      [longitude, latitude, categoryId, thresholdMeters]
+    );
+    if (!rows[0]) return null;
+    const [issue] = await this.attachReports([toIssue(rows[0])]);
+    const distance = Number(rows[0].distance_meters);
+    return { issue, distanceMeters: Math.round(distance * 10) / 10 };
   }
 
   async addIssue(issue: Issue): Promise<Issue> {
