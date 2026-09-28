@@ -82,7 +82,7 @@ Try signing in as **Water** and opening a Roads ticket — you'll get a hard `40
 - **data.gov.in Public-Data Fusion:** [`src/lib/publicData.ts`](src/lib/publicData.ts)
 - **Municipal Command Console (admin):** [`src/components/AdminPortal.tsx`](src/components/AdminPortal.tsx)
 
-> `database/schema.sql` is kept as an original design reference. The schema the app actually creates and queries is `database/migrations/*.sql`, which the store applies in filename order on boot.
+> `database/schema.sql` is a reference document regenerated from the live database and verified against it. The schema the app actually creates and queries is `database/migrations/*.sql`, applied once in filename order and recorded in `schema_migrations`.
 
 ---
 
