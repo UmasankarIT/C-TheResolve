@@ -29,6 +29,7 @@ const CivicMap = dynamic(() => import('@/components/CivicMap').then((mod) => mod
 
 export default function HomePage() {
   const [session, setSession] = useState<AuthUser | null>(null);
+  const [myReports, setMyReports] = useState<Issue[]>([]);
   const [activeTab, setActiveTab] = useState<AppTab>('map');
   const [issues, setIssues] = useState<Issue[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -51,6 +52,27 @@ export default function HomePage() {
       }
     });
   }, []);
+
+  // The public feed no longer carries reporter identity, so a citizen's own
+  // reports come from a separate endpoint that scopes by the session rather than
+  // the client filtering the whole feed. Re-fetched whenever the identity
+  // changes so a fresh sign-in and a sign-out cannot show stale rows.
+  useEffect(() => {
+    if (!session || session.role !== 'citizen') {
+      setMyReports([]);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/citizen/my-reports')
+      .then((res) => (res.ok ? res.json() : { reports: [] }))
+      .then((data) => {
+        if (!cancelled) setMyReports(data.reports || []);
+      })
+      .catch((err) => console.error('Failed to load your reports:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.userId]);
 
   // Refetch the unread badge whenever the identity changes
   const refreshNotifications = useCallback(async () => {
@@ -343,7 +365,7 @@ export default function HomePage() {
         )}
 
         {activeTab === 'my' && session?.role === 'citizen' && (
-          <CitizenReports user={session} issues={issues} onSelectOnMap={handleSelectOnMap} />
+          <CitizenReports user={session} issues={myReports} onSelectOnMap={handleSelectOnMap} />
         )}
 
         {activeTab === 'tasks' && session?.role === 'department' && (

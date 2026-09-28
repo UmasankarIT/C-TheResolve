@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { civicStore } from '@/lib/store';
+import { Issue } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * The issue feed is intentionally public and unauthenticated, so reporter
+ * identity must not travel with it. citizenUserId is a phone-linked pseudonymous
+ * handle and citizenName is a real name, and together they pin a person to a
+ * street address -- so both are stripped here.
+ *
+ * A citizen's own reports are served by /api/citizen/my-reports, which scopes by
+ * the authenticated session instead of shipping every reporter to every caller.
+ * Staff still see reporter identity via the admin endpoints.
+ */
+function toPublicIssue(issue: Issue): Omit<Issue, 'citizenUserId' | 'citizenName'> {
+  const { citizenUserId: _userId, citizenName: _name, ...rest } = issue;
+  return rest;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -36,7 +52,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      issues,
+      issues: issues.map(toPublicIssue),
       categories,
       totalCount: issues.length,
     });

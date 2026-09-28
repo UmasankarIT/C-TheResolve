@@ -2,18 +2,24 @@
 
 import React from 'react';
 import { Issue, AuthUser } from '@/lib/types';
+import { TERMINAL_STATUSES } from '@/lib/workflow';
 import { StatusPill } from './StatusPill';
 import { MapPin, Clock, Mic, FileCheck2, TrendingUp, Inbox } from 'lucide-react';
 
 interface CitizenReportsProps {
   user: AuthUser;
-  issues: Issue[]; // already filtered to citizenUserId === user.userId
+  // Scoped server-side by /api/citizen/my-reports from the session's own userId.
+  // The public feed deliberately omits reporter identity, so this list is the
+  // only source that carries it and must not be derived by filtering that feed.
+  issues: Issue[];
   onSelectOnMap: (issue: Issue) => void;
 }
 
 export const CitizenReports: React.FC<CitizenReportsProps> = ({ user, issues, onSelectOnMap }) => {
+  // Defensive only: the endpoint already filters by userId. Kept so a caller that
+  // ever passes the wrong list cannot render another citizen's reports.
   const mine = issues.filter((i) => i.citizenUserId === user.userId);
-  const active = mine.filter((i) => !['resolved', 'rejected', 'merged'].includes(i.status)).length;
+  const active = mine.filter((i) => !TERMINAL_STATUSES.includes(i.status)).length;
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-8 py-6 pb-28 md:pb-12 space-y-5">
