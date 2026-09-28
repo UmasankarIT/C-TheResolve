@@ -138,18 +138,6 @@ class MemoryStore implements CivicStore {
     return (await this.getIssues()).filter((i) => i.citizenUserId === userId);
   }
 
-  async getIssuesForDepartment(departmentId: string): Promise<Issue[]> {
-    return (await this.getIssues()).filter(
-      (i) => i.departmentId === departmentId && i.status !== 'merged' && i.status !== 'rejected'
-    );
-  }
-
-  async getAssignableForDepartment(departmentId: string): Promise<Issue[]> {
-    return (await this.getIssuesForDepartment(departmentId)).filter(
-      (i) => i.status === 'assigned' || i.status === 'in_progress'
-    );
-  }
-
   /**
    * In-memory counterpart of the Postgres ST_DWithin query. Correctness must
    * match the SQL path exactly (same terminal-status handling, same 25m default)

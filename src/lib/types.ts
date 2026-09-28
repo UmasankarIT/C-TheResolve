@@ -109,10 +109,6 @@ export interface GeocodeHit {
   sublabel?: string;
 }
 
-export interface GeocodeResponse {
-  results: GeocodeHit[];
-}
-
 export interface LocationDetails {
   state?: string;
   district?: string;

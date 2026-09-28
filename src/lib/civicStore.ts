@@ -62,8 +62,6 @@ export interface CivicStore {
   upsertDepartment(dept: Department): Promise<Department>;
 
   getIssuesForCitizen(userId: string): Promise<Issue[]>;
-  getIssuesForDepartment(departmentId: string): Promise<Issue[]>;
-  getAssignableForDepartment(departmentId: string): Promise<Issue[]>;
 
   addProofOfWork(proof: ProofOfWork): Promise<Issue | null>;
   requestReassign(issueId: string, req: ReassignRequest): Promise<Issue | null>;

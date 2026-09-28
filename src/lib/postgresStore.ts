@@ -782,30 +782,6 @@ export class PostgresStore implements CivicStore {
     return this.attachReports(rows.map(toIssue));
   }
 
-  async getIssuesForDepartment(departmentId: string): Promise<Issue[]> {
-    await this.ensureReady();
-    const { rows } = await this.q<IssueRow>(
-      `${ISSUE_SELECT}
-       WHERE i.department_id = $1 AND i.status NOT IN ('merged', 'rejected')
-       ORDER BY i.priority_score DESC`,
-      [departmentId]
-    );
-    return this.attachReports(rows.map(toIssue));
-  }
-
-  async getAssignableForDepartment(departmentId: string): Promise<Issue[]> {
-    await this.ensureReady();
-    const { rows } = await this.q<IssueRow>(
-      `${ISSUE_SELECT}
-       WHERE i.department_id = $1
-         AND i.status IN ('assigned', 'in_progress')
-         AND i.status NOT IN ('merged', 'rejected')
-       ORDER BY i.priority_score DESC`,
-      [departmentId]
-    );
-    return this.attachReports(rows.map(toIssue));
-  }
-
   // --- Proof of work -------------------------------------------------------
 
   async addProofOfWork(proof: ProofOfWork): Promise<Issue | null> {

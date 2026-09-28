@@ -31,21 +31,6 @@ export function calculateGeodesicDistanceMeters(
 }
 
 /**
- * Checks if two points fall within a specified metric proximity radius.
- * PostGIS equivalent: ST_DWithin(geom1::geography, geom2::geography, thresholdMeters)
- */
-export function isWithinProximity(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-  thresholdMeters: number = 25
-): boolean {
-  const distance = calculateGeodesicDistanceMeters(lat1, lon1, lat2, lon2);
-  return distance <= thresholdMeters;
-}
-
-/**
  * Finds existing active issue within spatial threshold for deduplication.
  *
  * In-memory reference implementation. The Postgres store answers the same

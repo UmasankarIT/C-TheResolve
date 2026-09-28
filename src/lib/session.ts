@@ -17,10 +17,6 @@ export function tabsForRole(role: AuthUser['role'] | null): AppTab[] {
   }
 }
 
-export function defaultTabForRole(role: AuthUser['role'] | null): AppTab {
-  return 'map';
-}
-
 export function tabAllowedForRole(role: AuthUser['role'] | null, tab: AppTab): boolean {
   return tabsForRole(role).includes(tab);
 }

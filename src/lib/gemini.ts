@@ -184,28 +184,6 @@ export async function analyzeReportPhoto(
   return { engine: 'heuristic', analysis: await analyzeIssueImage(imageUrl, categoryCode, notes) };
 }
 
-/**
- * Analyzes civic infrastructure damage photo using Google Gemini 1.5/2.0 Flash.
- * Uses structured JSON prompting to extract damage categorization and severity.
- * Never throws: falls back to the deterministic classifier.
- */
-export async function analyzeCivicPhotoWithGemini(
-  base64DataWithPrefix: string,
-  userComment?: string
-): Promise<GeminiVisionAnalysis> {
-  const apiKey = geminiApiKey();
-  if (!apiKey) {
-    console.warn('[Gemini Service] No GEMINI_API_KEY detected in environment. Using demo-grade civic classifier fallback.');
-    return generateFallbackAnalysis(userComment);
-  }
-  try {
-    return await runGeminiVision(apiKey, base64DataWithPrefix, userComment);
-  } catch (error) {
-    console.error('[Gemini Service] Error calling Gemini API:', error);
-    return generateFallbackAnalysis(userComment);
-  }
-}
-
 async function runGeminiVision(
   apiKey: string,
   base64DataWithPrefix: string,
@@ -364,72 +342,4 @@ Return a valid JSON object strictly matching this schema:
     console.error('[Gemini Service] Voice note transcription failed:', error);
     return empty;
   }
-}
-
-function generateFallbackAnalysis(userComment?: string): GeminiVisionAnalysis {
-  const comment = (userComment || '').toLowerCase();
-
-  if (comment.includes('garbage') || comment.includes('trash') || comment.includes('waste') || comment.includes('kachra')) {
-    return {
-      category: 'Illegal Garbage Dumping',
-      categorySlug: 'garbage',
-      confidence: 0.94,
-      severityScore: 3.2,
-      hazardAssessment: 'Accumulation of unsegregated solid waste attracting pests and emitting odors.',
-      suggestedRemediation: 'Deploy municipal sanitation tipper truck and spray disinfectant.',
-      isCivicIssue: true,
-      tags: ['solid_waste', 'sanitation', 'health_hazard']
-    };
-  }
-
-  if (comment.includes('drain') || comment.includes('manhole') || comment.includes('nala')) {
-    return {
-      category: 'Broken Drainage & Open Manholes',
-      categorySlug: 'broken_drainage',
-      confidence: 0.96,
-      severityScore: 4.6,
-      hazardAssessment: 'High-risk open drainage hazard risking severe pedestrian injury or vehicle tire entrapment.',
-      suggestedRemediation: 'Erect hazard barricade immediately and install heavy-duty ductile iron manhole cover.',
-      isCivicIssue: true,
-      tags: ['open_manhole', 'monsoon_hazard', 'pedestrian_risk']
-    };
-  }
-
-  if (comment.includes('light') || comment.includes('dark') || comment.includes('pole')) {
-    return {
-      category: 'Broken Streetlight & Electrical Hazards',
-      categorySlug: 'street_light',
-      confidence: 0.91,
-      severityScore: 2.8,
-      hazardAssessment: 'Black spot at night creating safety concerns for female commuters and pedestrians.',
-      suggestedRemediation: 'Dispatch electrical department line crew to replace LED luminaire and check fuse box.',
-      isCivicIssue: true,
-      tags: ['dark_spot', 'electrical_maintenance', 'public_safety']
-    };
-  }
-
-  if (comment.includes('sewage') || comment.includes('gutter') || comment.includes('smell')) {
-    return {
-      category: 'Sewage Overflow & Contamination',
-      categorySlug: 'sewage',
-      confidence: 0.93,
-      severityScore: 4.2,
-      hazardAssessment: 'Untreated blackwater backflow risking cholera, dengue, and surface groundwater contamination.',
-      suggestedRemediation: 'Deploy jetting-cum-suction tanker to clear underground pipeline blockage.',
-      isCivicIssue: true,
-      tags: ['sewage_overflow', 'biohazard', 'urgent_sanitation']
-    };
-  }
-
-  // Default: Pothole & road damage
-  return {
-    category: 'Pothole & Road Surface Damage',
-    categorySlug: 'pothole',
-    confidence: 0.92,
-    severityScore: 3.8,
-    hazardAssessment: 'Structural road depression causing abrupt braking and severe two-wheeler skid hazards.',
-    suggestedRemediation: 'Excavate loose aggregate, apply bituminous tack coat, and compact with mini-roller.',
-    isCivicIssue: true,
-    tags: ['pothole', 'traffic_safety', 'asphalt_repair']
-  };
 }
