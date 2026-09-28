@@ -3,6 +3,7 @@ import { civicStore } from '@/lib/store';
 import { findNearbyActiveIssue, generateMockAddress, calculateGeodesicDistanceMeters } from '@/lib/spatial';
 import { calculatePriorityScore } from '@/lib/scoring';
 import { analyzeReportPhoto } from '@/lib/gemini';
+import { storeImageDataUrl } from '@/lib/objectStore';
 import { CreateReportRequest, Issue, IssueReport } from '@/lib/types';
 import { getSession, unauthorized } from '@/lib/auth';
 import { departmentForCategory } from '@/lib/departments';
@@ -87,6 +88,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // The photo has now been analysed and accepted, so it is safe to move the
+    // bytes out of the request and into object storage. Deliberately after the
+    // ML gate: a rejected or spammy upload should not leave an orphan object
+    // behind. Gemini already has what it needs from the in-memory data URL
+    // above, so nothing here changes the AI path.
+    const storedImageUrl = await storeImageDataUrl(String(body.imageUrl || ''), 'issue');
+
     // 3. PostGIS ST_DWithin Geodesic Deduplication Check (25m threshold)
     const activeIssues = await civicStore.getIssues();
     const match = findNearbyActiveIssue(body.latitude, body.longitude, category.id, activeIssues, 25.0);
@@ -105,7 +113,7 @@ export async function POST(req: NextRequest) {
         longitude: body.longitude,
         accuracyMeters: body.accuracyMeters || 10,
         isOnSite: body.isOnSite,
-        imageUrl: body.imageUrl,
+        imageUrl: storedImageUrl,
         citizenNotes: body.citizenNotes,
         transcript: body.transcript,
         exif,
@@ -157,7 +165,7 @@ export async function POST(req: NextRequest) {
       longitude: body.longitude,
       accuracyMeters: body.accuracyMeters || 10,
       isOnSite: body.isOnSite,
-      imageUrl: body.imageUrl,
+      imageUrl: storedImageUrl,
       citizenNotes: body.citizenNotes,
       transcript: body.transcript,
       exif,
@@ -186,7 +194,7 @@ export async function POST(req: NextRequest) {
       communityUpvotes: 0,
       mlSeverityScore: initialSeverity,
       priorityScore: priorityBreakdown.totalScore,
-      imageUrl: body.imageUrl,
+      imageUrl: storedImageUrl,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       reports: [newReport],

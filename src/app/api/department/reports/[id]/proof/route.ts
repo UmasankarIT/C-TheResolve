@@ -3,6 +3,7 @@ import { civicStore } from '@/lib/store';
 import { getSession, isRole, unauthorized, denied } from '@/lib/auth';
 import { logAction, notifyUser } from '@/lib/events';
 import { ProofOfWork } from '@/lib/types';
+import { storeImageDataUrl } from '@/lib/objectStore';
 import { CITY_ADMIN_USER_ID } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -35,11 +36,16 @@ export async function POST(
     }
 
     const body = await req.json();
-    const photoUrl = String(body.photoUrl || '');
+    const rawPhotoUrl = String(body.photoUrl || '');
     const notes = String(body.notes || '');
-    if (!photoUrl) {
+    if (!rawPhotoUrl) {
       return NextResponse.json({ error: 'An after-photo is required as proof of work.' }, { status: 400 });
     }
+
+    // Proof photos are unresized originals (StaffTasks.tsx reads the file
+    // straight through FileReader), so these are the largest blobs in the
+    // system — often several MB of base64. Move them to object storage.
+    const photoUrl = await storeImageDataUrl(rawPhotoUrl, 'proof');
 
     const proof: ProofOfWork = {
       id: `proof-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
