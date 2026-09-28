@@ -79,6 +79,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   // ships with both a playable clip AND its transcription (fed to ML analysis).
   const [voiceNote, setVoiceNote] = useState<{ audioUrl: string; transcript: string } | null>(null);
   const [clipSeconds, setClipSeconds] = useState<number>(0);
+  const [consentGiven, setConsentGiven] = useState<boolean>(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -275,6 +276,11 @@ export const ReportModal: React.FC<ReportModalProps> = ({
       setErrorMessage(
         'Location not confirmed yet. Allow GPS, search your address, or tap the map to drop a pin — this keeps the civic data accurate.'
       );
+      return;
+    }
+
+    if (!consentGiven) {
+      setErrorMessage('Please confirm the data consent notice before submitting your report.');
       return;
     }
 
@@ -594,7 +600,20 @@ export const ReportModal: React.FC<ReportModalProps> = ({
 
         {/* Sticky Action Bar */}
         {!submissionResult && (
-          <div className="p-4 sm:p-6 border-t border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl">
+          <div className="p-4 sm:p-6 border-t border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl space-y-3">
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={consentGiven}
+                onChange={(e) => setConsentGiven(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0"
+              />
+              <span className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                I consent to CivicResolve storing my report, location, photo and voice note for resolving this
+                grievance, and to processing them with Google Gemini to classify the issue. Aggregated views are
+                anonymous. See <span className="font-semibold">PRIVACY.md</span>.
+              </span>
+            </label>
             <button
               type="submit"
               form="report-form"

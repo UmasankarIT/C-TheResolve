@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyOtp, createCitizenUser, signSession, SESSION_COOKIE, SESSION_COOKIE_OPTS } from '@/lib/auth';
+import {
+  verifyOtp,
+  invalidateOtp,
+  createCitizenUser,
+  signSession,
+  checkOtpRateLimit,
+  clientIp,
+  SESSION_COOKIE,
+  SESSION_COOKIE_OPTS,
+} from '@/lib/auth';
 import { civicStore } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
@@ -13,8 +22,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Enter a valid 10-digit Indian mobile number.' }, { status: 400 });
     }
 
+    const ip = clientIp(req);
+    for (const limit of [{ key: `otp-try:${ip}`, max: 60 }, { key: `otp-try:${phone}`, max: 10 }]) {
+      const gate = checkOtpRateLimit(limit.key, limit.max);
+      if (!gate.allowed) {
+        return NextResponse.json(
+          { error: `Too many verification attempts. Try again in ${Math.ceil(gate.retryAfterSeconds / 60)} minute(s).` },
+          { status: 429, headers: { 'Retry-After': String(gate.retryAfterSeconds) } }
+        );
+      }
+    }
+
     const otp = String(body.otp || '').trim();
     if (!verifyOtp(phone, otp)) {
+      // Repeated wrong guesses kill the live code so a leaked OTP cannot be
+      // brute-forced; the citizen simply requests a new one.
+      const failures = checkOtpRateLimit(`otp-fail:${phone}`, 3);
+      if (!failures.allowed) invalidateOtp(phone);
       return NextResponse.json({ error: 'Invalid or expired OTP.' }, { status: 401 });
     }
 

@@ -11,6 +11,12 @@ const SECRET = new TextEncoder().encode(
   process.env.CIVRES_JWT_SECRET || 'civicresolve-dgp-demo-secret-change-in-prod'
 );
 
+if (process.env.NODE_ENV === 'production' && !process.env.CIVRES_JWT_SECRET) {
+  console.warn(
+    '[auth] CIVRES_JWT_SECRET is unset — using the public demo secret. Sessions are forgeable; set CIVRES_JWT_SECRET (Cloud Run: civicresolve-jwt) before going live.'
+  );
+}
+
 export const SESSION_COOKIE_OPTS = {
   httpOnly: true,
   sameSite: 'lax' as const,
@@ -85,6 +91,51 @@ export function issueOtp(phone: string): string {
   return otp;
 }
 
+// ---------------------------------------------------------------------------
+// Brute-force protection. Without a real SMS provider a 6-digit OTP is guessable,
+// so both the request and verify endpoints are throttled per phone and per IP.
+// ---------------------------------------------------------------------------
+const OTP_WINDOW_MS = 15 * 60 * 1000;
+
+const globalForLimit = globalThis as unknown as {
+  __civresOtpRate?: Map<string, { count: number; resetAt: number }>;
+};
+const otpRate: Map<string, { count: number; resetAt: number }> =
+  globalForLimit.__civresOtpRate || new Map();
+if (process.env.NODE_ENV !== 'production') globalForLimit.__civresOtpRate = otpRate;
+
+export function clientIp(req: NextRequest): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.headers.get('x-real-ip') || 'local';
+}
+
+export function checkOtpRateLimit(
+  identifier: string,
+  limit: number
+): { allowed: boolean; retryAfterSeconds: number } {
+  const now = Date.now();
+
+  if (otpRate.size > 5000) {
+    const stale: string[] = [];
+    otpRate.forEach((value, key) => {
+      if (now > value.resetAt) stale.push(key);
+    });
+    stale.forEach((key) => otpRate.delete(key));
+  }
+
+  const entry = otpRate.get(identifier);
+  if (!entry || now > entry.resetAt) {
+    otpRate.set(identifier, { count: 1, resetAt: now + OTP_WINDOW_MS });
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+  if (entry.count >= limit) {
+    return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((entry.resetAt - now) / 1000)) };
+  }
+  entry.count += 1;
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
 export function verifyOtp(phone: string, otp: string): boolean {
   const entry = otpStore.get(phone);
   if (!entry) return false;
@@ -95,6 +146,10 @@ export function verifyOtp(phone: string, otp: string): boolean {
   const ok = entry.otp === otp;
   if (ok) otpStore.delete(phone);
   return ok;
+}
+
+export function invalidateOtp(phone: string): void {
+  otpStore.delete(phone);
 }
 
 // ---------------------------------------------------------------------------

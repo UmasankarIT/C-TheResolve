@@ -278,8 +278,18 @@ export class PostgresStore implements CivicStore {
       await client.query('BEGIN');
       const existing = await client.query('SELECT COUNT(*)::int AS n FROM issues');
       if (existing.rows[0].n > 0) {
-        await client.query('COMMIT');
-        return;
+        // The demo dataset is disposable: refresh it when the table contains
+        // nothing but seeds, so pilot geography changes show up without a
+        // manual volume reset. Real citizen issues (iss-*) are never touched.
+        const seedOnly = await client.query(
+          `SELECT COUNT(*)::int AS n FROM issues WHERE id NOT LIKE 'seed-%'`
+        );
+        if (seedOnly.rows[0].n > 0) {
+          await client.query('COMMIT');
+          return;
+        }
+        await client.query('DELETE FROM issues');
+        console.log('[store] Refreshed demo seed dataset (no citizen-authored issues present)');
       }
       const seeds = buildSeedIssues();
       for (const issue of seeds) {
@@ -335,7 +345,7 @@ export class PostgresStore implements CivicStore {
         );
       }
       await client.query('COMMIT');
-      console.log(`[store] Seeded ${seeds.length} multi-state sample grievances across ${SEED_CITIES.length} cities`);
+      console.log(`[store] Seeded ${seeds.length} sample grievances across ${SEED_CITIES.length} ${SEED_CITIES[0].state} districts`);
     } catch (err) {
       try {
         await client.query('ROLLBACK');

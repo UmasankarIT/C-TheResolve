@@ -19,6 +19,7 @@ import {
   RefreshCw,
   MapPinned,
   Sparkles,
+  Globe2,
 } from 'lucide-react';
 
 interface AdminPortalProps {
@@ -80,6 +81,8 @@ type Hotspot = {
   leadingIssueId: string;
   leadingIssueTitle: string;
   areaName: string;
+  state: string;
+  district: string;
   demandScore: number;
   radiusMeters: number;
 };
@@ -99,14 +102,60 @@ type Recommendation = {
 
 type CategoryDemandRow = { id: string; name: string; openCount: number; totalUpvotes: number; avgSeverity: number };
 
+type StateDemand = {
+  state: string;
+  districts: string[];
+  openCount: number;
+  totalUpvotes: number;
+  avgSeverity: number;
+  hotspotCount: number;
+  topCategories: { id: string; name: string; count: number }[];
+  riskLabel: string;
+  pressureScore: number;
+};
+
+type NationalSummary = {
+  totalOpen: number;
+  totalUpvotes: number;
+  totalHotspots: number;
+  statesCovered: number;
+  districtsCovered: number;
+  leadingState: string;
+  leadingStateScore: number;
+  leadingCategory: string;
+  urgentStates: number;
+  investmentFocus: string;
+};
+
+type DistrictDemand = {
+  district: string;
+  state: string;
+  openCount: number;
+  totalUpvotes: number;
+  avgSeverity: number;
+  hotspotCount: number;
+  topCategories: { id: string; name: string; count: number }[];
+  pressureScore: number;
+};
+
 type HotspotsData = {
   generatedAt: string;
   mode: 'gemini' | 'heuristic';
   dataSources: string[];
-  counts: { totalOpen: number; totalResolved: number; totalUpvotes: number; hotspotCount: number };
+  counts: {
+    totalOpen: number;
+    totalResolved: number;
+    totalUpvotes: number;
+    hotspotCount: number;
+    stateCount: number;
+    districtCount: number;
+  };
   hotspots: Hotspot[];
   recommendations: Recommendation[];
   categoryDemand: CategoryDemandRow[];
+  stateDemand: StateDemand[];
+  districtDemand: DistrictDemand[];
+  national: NationalSummary;
 };
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ user, issues, categories, onStatusUpdate, onMerge }) => {
@@ -744,8 +793,8 @@ function PolicymakerSection({ data, loading }: { data: HotspotsData | null; load
   const topCategory = data.categoryDemand[0];
   const kpis = [
     { label: 'Open work orders', value: data.counts.totalOpen },
+    { label: 'States / districts', value: `${data.counts.stateCount} / ${data.counts.districtCount}` },
     { label: 'Demand hotspots', value: data.counts.hotspotCount },
-    { label: 'Community upvotes', value: data.counts.totalUpvotes },
     { label: 'Top pressure point', value: topCategory?.name || '—' },
   ];
 
@@ -776,6 +825,111 @@ function PolicymakerSection({ data, loading }: { data: HotspotsData | null; load
           </div>
         ))}
       </div>
+
+      {data.stateDemand.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center space-x-2">
+            <Globe2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              National rollup
+            </h3>
+          </div>
+          <div className="rounded-3xl border border-sky-200 dark:border-sky-500/30 bg-sky-50/60 dark:bg-sky-500/5 p-4">
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              <span className="font-bold text-slate-900 dark:text-white">{data.national.totalOpen} open grievances</span>{' '}
+              across {data.national.statesCovered} states and {data.national.districtsCovered} districts, clustered into{' '}
+              {data.national.totalHotspots} hotspots with {data.national.totalUpvotes} community endorsements.
+            </p>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px]">
+              <div className="rounded-2xl bg-white dark:bg-slate-900 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Highest civic pressure</p>
+                <p className="mt-1 font-bold text-slate-900 dark:text-white">{data.national.leadingState}</p>
+                <p className="text-slate-500 dark:text-slate-400">pressure {data.national.leadingStateScore}/100</p>
+              </div>
+              <div className="rounded-2xl bg-white dark:bg-slate-900 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Investment focus</p>
+                <p className="mt-1 font-bold text-slate-900 dark:text-white">{data.national.leadingCategory}</p>
+                <p className="text-slate-500 dark:text-slate-400">{data.national.urgentStates} state(s) above urgent threshold</p>
+              </div>
+              <div className="rounded-2xl bg-white dark:bg-slate-900 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">National priority</p>
+                <p className="mt-1 font-bold text-slate-900 dark:text-white">{data.national.investmentFocus}</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {data.stateDemand.map((s) => (
+              <div key={s.state} className="p-4 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-bold truncate">{s.state}</h4>
+                    <p className="text-[10px] text-slate-400 truncate">{s.riskLabel}</p>
+                  </div>
+                  <span className="shrink-0 text-sm font-bold text-slate-900 dark:text-white">{s.pressureScore}</span>
+                </div>
+                <div className="mt-2"><ScoreBar score={s.pressureScore} /></div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{s.openCount} open</span>
+                  <span>{s.hotspotCount} hotspots</span>
+                  <span>{s.districts.length} districts</span>
+                  <span>{s.totalUpvotes} upvotes</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {s.topCategories.map((c) => (
+                    <span key={c.id} className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                      {c.name} ×{c.count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {data.districtDemand.length > 0 && (
+            <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+              <div className="px-4 pt-4 pb-2 flex items-center space-x-2">
+                <BarChart3 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  District pressure index
+                </h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[11px]">
+                  <thead>
+                    <tr className="text-slate-400 uppercase tracking-wider text-[10px]">
+                      <th className="px-4 py-2 font-bold">District</th>
+                      <th className="px-2 py-2 font-bold">Pressure</th>
+                      <th className="px-2 py-2 font-bold text-right">Open</th>
+                      <th className="px-2 py-2 font-bold text-right">Hotspots</th>
+                      <th className="px-2 py-2 font-bold text-right">Severity</th>
+                      <th className="px-4 py-2 font-bold">Top pressure</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.districtDemand.map((d) => (
+                      <tr key={`${d.state}-${d.district}`} className="border-t border-slate-100 dark:border-slate-800">
+                        <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">{d.district}</td>
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-2 min-w-[110px]">
+                            <span className="font-bold w-6 text-slate-900 dark:text-white">{d.pressureScore}</span>
+                            <span className="flex-1"><ScoreBar score={d.pressureScore} /></span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono">{d.openCount}</td>
+                        <td className="px-2 py-2 text-right font-mono">{d.hotspotCount}</td>
+                        <td className="px-2 py-2 text-right font-mono">{d.avgSeverity}</td>
+                        <td className="px-4 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          {d.topCategories[0]?.name || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {data.recommendations.length > 0 && (
         <div className="space-y-2.5">
@@ -835,6 +989,7 @@ function PolicymakerSection({ data, loading }: { data: HotspotsData | null; load
                 </div>
                 <div className="mt-2"><ScoreBar score={h.demandScore} /></div>
                 <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{h.state}</span>
                   <span className="font-bold text-slate-700 dark:text-slate-200">{h.issueCount} issues</span>
                   <span>{h.totalUpvotes} upvotes</span>
                   <span>P{h.avgPriority.toFixed(1)}</span>

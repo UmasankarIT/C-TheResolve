@@ -19,6 +19,8 @@ export interface Hotspot {
   leadingIssueId: string;
   leadingIssueTitle: string;
   areaName: string;
+  state: string;
+  district: string;
   demandScore: number; // 0-100
   radiusMeters: number;
 }
@@ -29,6 +31,100 @@ export interface CategoryDemand {
   openCount: number;
   totalUpvotes: number;
   avgSeverity: number;
+}
+
+export interface StateDemand {
+  state: string;
+  districts: string[];
+  openCount: number;
+  totalUpvotes: number;
+  avgSeverity: number;
+  hotspotCount: number;
+  topCategories: { id: string; name: string; count: number }[];
+  riskLabel: string;
+  pressureScore: number; // 0-100, relative national ranking
+}
+
+export interface NationalSummary {
+  totalOpen: number;
+  totalUpvotes: number;
+  totalHotspots: number;
+  statesCovered: number;
+  districtsCovered: number;
+  leadingState: string;
+  leadingStateScore: number;
+  leadingCategory: string;
+  urgentStates: number;
+  investmentFocus: string;
+}
+
+export interface DistrictDemand {
+  district: string;
+  state: string;
+  openCount: number;
+  totalUpvotes: number;
+  avgSeverity: number;
+  hotspotCount: number;
+  topCategories: { id: string; name: string; count: number }[];
+  pressureScore: number; // 0-100, relative ranking within the coverage area
+}
+
+export function buildDistrictDemand(issues: Issue[], hotspots: Hotspot[]): DistrictDemand[] {
+  if (issues.length === 0) return [];
+
+  const byDistrict = new Map<string, { state: string; issues: Issue[] }>();
+  for (const issue of issues) {
+    const district = issue.locationDetails?.district;
+    if (!district) continue;
+    const key = `${issue.locationDetails?.state || 'Unknown'}|${district}`;
+    const bucket = byDistrict.get(key);
+    if (bucket) bucket.issues.push(issue);
+    else byDistrict.set(key, { state: issue.locationDetails?.state || 'Unknown', issues: [issue] });
+  }
+
+  const hotspotsByDistrict = new Map<string, number>();
+  for (const hs of hotspots) {
+    const key = `${hs.state}|${hs.district}`;
+    hotspotsByDistrict.set(key, (hotspotsByDistrict.get(key) || 0) + 1);
+  }
+
+  const entries = Array.from(byDistrict.entries());
+  const maxOpen = Math.max(...entries.map(([, v]) => v.issues.length), 1);
+  const maxHotspots = Math.max(...Array.from(hotspotsByDistrict.values()), 1);
+
+  return entries
+    .map(([key, { state, issues: districtIssues }]) => {
+      const catCounts = new Map<string, { id: string; name: string; count: number }>();
+      let severity = 0;
+      let upvotes = 0;
+      for (const issue of districtIssues) {
+        const entry = catCounts.get(issue.categoryId) || { id: issue.categoryId, name: issue.category.name, count: 0 };
+        entry.count += 1;
+        catCounts.set(issue.categoryId, entry);
+        severity += issue.mlSeverityScore || 3;
+        upvotes += issue.communityUpvotes;
+      }
+
+      const avgSeverity = severity / districtIssues.length;
+      const pressureScore = Math.min(
+        100,
+        Math.round(
+          55 * (districtIssues.length / maxOpen) + 30 * (avgSeverity / 5) + 15 * ((hotspotsByDistrict.get(key) || 0) / maxHotspots)
+        )
+      );
+
+      return {
+        district: key.split('|')[1],
+        state,
+        openCount: districtIssues.length,
+        totalUpvotes: upvotes,
+        avgSeverity: Number(avgSeverity.toFixed(2)),
+        hotspotCount: hotspotsByDistrict.get(key) || 0,
+        topCategories: Array.from(catCounts.values()).sort((a, b) => b.count - a.count).slice(0, 2),
+        pressureScore,
+      };
+    })
+    .sort((a, b) => b.pressureScore - a.pressureScore || b.openCount - a.openCount);
 }
 
 export interface ProjectRecommendation {
@@ -215,6 +311,8 @@ export function buildHotspots(issues: Issue[]): Hotspot[] {
         leadingIssueId: leading.id,
         leadingIssueTitle: leading.title,
         areaName: areaLabel(leading),
+        state: leading.locationDetails?.state || 'Unknown',
+        district: leading.locationDetails?.district || 'Unknown',
         demandScore,
         radiusMeters,
       };
@@ -240,6 +338,102 @@ export function buildCategoryDemand(issues: Issue[]): CategoryDemand[] {
   return Array.from(map.values())
     .map((c) => ({ ...c, avgSeverity: Number((c.avgSeverity / Math.max(1, c.openCount)).toFixed(2)) }))
     .sort((a, b) => b.openCount - a.openCount);
+}
+
+export function buildStateDemand(issues: Issue[], hotspots: Hotspot[]): StateDemand[] {
+  if (issues.length === 0) return [];
+
+  const byState = new Map<string, Issue[]>();
+  for (const issue of issues) {
+    const state = issue.locationDetails?.state || 'Unknown';
+    const bucket = byState.get(state);
+    if (bucket) bucket.push(issue);
+    else byState.set(state, [issue]);
+  }
+
+  const hotspotsByState = new Map<string, number>();
+  for (const hs of hotspots) {
+    hotspotsByState.set(hs.state, (hotspotsByState.get(hs.state) || 0) + 1);
+  }
+
+  const maxOpen = Math.max(...Array.from(byState.values()).map((v) => v.length), 1);
+  const maxHotspots = Math.max(...Array.from(hotspotsByState.values()), 1);
+
+  return Array.from(byState.entries())
+    .map(([state, stateIssues]) => {
+      const catCounts = new Map<string, { id: string; name: string; count: number }>();
+      const districts = new Set<string>();
+      let severity = 0;
+      let upvotes = 0;
+      for (const issue of stateIssues) {
+        const entry = catCounts.get(issue.categoryId) || { id: issue.categoryId, name: issue.category.name, count: 0 };
+        entry.count += 1;
+        catCounts.set(issue.categoryId, entry);
+        severity += issue.mlSeverityScore || 3;
+        upvotes += issue.communityUpvotes;
+        const district = issue.locationDetails?.district;
+        if (district) districts.add(district);
+      }
+
+      const avgSeverity = severity / stateIssues.length;
+      const hotspotCount = hotspotsByState.get(state) || 0;
+      const risk = CONTEXTUAL_RISK[state] || DEFAULT_RISK;
+
+      const pressureScore = Math.min(
+        100,
+        Math.round(
+          55 * (stateIssues.length / maxOpen) +
+            30 * (avgSeverity / 5) +
+            15 * (hotspotCount / maxHotspots)
+        )
+      );
+
+      return {
+        state,
+        districts: Array.from(districts).sort(),
+        openCount: stateIssues.length,
+        totalUpvotes: upvotes,
+        avgSeverity: Number(avgSeverity.toFixed(2)),
+        hotspotCount,
+        topCategories: Array.from(catCounts.values()).sort((a, b) => b.count - a.count).slice(0, 3),
+        riskLabel: risk.label,
+        pressureScore,
+      };
+    })
+    .sort((a, b) => b.pressureScore - a.pressureScore || b.openCount - a.openCount);
+}
+
+export function buildNationalSummary(
+  issues: Issue[],
+  hotspots: Hotspot[],
+  stateDemand: StateDemand[],
+  categoryDemand: CategoryDemand[]
+): NationalSummary {
+  const districts = new Set<string>();
+  for (const issue of issues) {
+    const district = issue.locationDetails?.district;
+    if (district) districts.add(district);
+  }
+
+  const leadingState = stateDemand[0];
+  const leadingCategory = categoryDemand[0];
+  const totalUpvotes = issues.reduce((acc, i) => acc + i.communityUpvotes, 0);
+  const urgentStates = stateDemand.filter((s) => s.pressureScore >= 60).length;
+
+  return {
+    totalOpen: issues.length,
+    totalUpvotes,
+    totalHotspots: hotspots.length,
+    statesCovered: stateDemand.filter((s) => s.state !== 'Unknown').length,
+    districtsCovered: districts.size,
+    leadingState: leadingState?.state || '—',
+    leadingStateScore: leadingState?.pressureScore || 0,
+    leadingCategory: leadingCategory?.name || '—',
+    urgentStates,
+    investmentFocus: leadingCategory
+      ? `${leadingCategory.name} (${leadingCategory.openCount} open work orders, avg severity ${leadingCategory.avgSeverity})`
+      : 'Awaiting citizen reports',
+  };
 }
 
 const PROJECT_TEMPLATES: Record<string, (area: string) => string> = {
@@ -295,7 +489,9 @@ export function buildRecommendations(
 export function buildPromptContext(
   issues: Issue[],
   hotspots: Hotspot[],
-  categoryDemand: CategoryDemand[]
+  categoryDemand: CategoryDemand[],
+  stateDemand: StateDemand[] = [],
+  districtDemand: DistrictDemand[] = []
 ): string {
   const stateCounts = new Map<string, number>();
   for (const i of issues) {
@@ -313,6 +509,11 @@ Category demand (name, open, upvotes, avg severity):
 ${categoryDemand.map((c) => `- ${c.name}: ${c.openCount} open, ${c.totalUpvotes} upvotes, severity ${c.avgSeverity}`).join('\n')}
 Demand hotspots (id, area, issue count, upvotes, avg priority 1-5, top category, demand score 0-100):
 ${hotspots.map((h) => `- ${h.id} ${h.areaName}: ${h.issueCount} issues, ${h.totalUpvotes} upvotes, priority ${h.avgPriority}, top=${h.topCategories[0]?.name || 'n/a'}, score=${h.demandScore}`).join('\n')}
+${stateDemand.length > 0 ? `State-level civic pressure (state, open, districts, hotspots, pressure score 0-100, leading risk):
+${stateDemand.map((s) => `- ${s.state}: ${s.openCount} open across ${s.districts.length} district(s), ${s.hotspotCount} hotspots, pressure ${s.pressureScore}, risk=${s.riskLabel}`).join('\n')}
+` : ''}${districtDemand.length > 0 ? `District-level civic pressure (district, state, open, hotspots, pressure 0-100, top category):
+${districtDemand.slice(0, 15).map((d) => `- ${d.district} (${d.state}): ${d.openCount} open, ${d.hotspotCount} hotspots, pressure ${d.pressureScore}, top=${d.topCategories[0]?.name || 'n/a'}`).join('\n')}
+` : ''}
 
 Respond with a JSON object of shape:
 { "recommendations": [ { "rank": 1, "title": string, "hotspot_id": string, "category": string, "department": string, "rationale": string, "estimated_impact": string, "indicative_investment": string } ] }

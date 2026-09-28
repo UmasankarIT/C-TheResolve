@@ -13,23 +13,25 @@ export interface SeedCity {
   wardName: string;
 }
 
+// Deep-coverage pilot: one entry per district for all 13 Andhra Pradesh
+// districts, anchored on the district headquarters. This is the unit a state
+// government would actually pilot CivicResolve in — a whole state, not a
+// sample. Coordinates are HQ points and `wardName` is a representative
+// locality, not the official AP ward/delimitation list.
 export const SEED_CITIES: SeedCity[] = [
+  { city: 'Anantapur', state: 'Andhra Pradesh', district: 'Anantapur', lat: 14.6819, lng: 77.6006, wardCode: 'ATP', wardName: 'Court Road' },
+  { city: 'Tirupati', state: 'Andhra Pradesh', district: 'Tirupati', lat: 13.6288, lng: 79.4192, wardCode: 'TPT', wardName: 'Sarakalavari' },
+  { city: 'Rajahmundry', state: 'Andhra Pradesh', district: 'East Godavari', lat: 17.0005, lng: 81.804, wardCode: 'EGD', wardName: 'Gowri Nagar' },
+  { city: 'Guntur', state: 'Andhra Pradesh', district: 'Guntur', lat: 16.3067, lng: 80.4365, wardCode: 'GNT', wardName: 'Brodru' },
+  { city: 'Machilipatnam', state: 'Andhra Pradesh', district: 'Krishna', lat: 16.1902, lng: 81.0948, wardCode: 'KRN', wardName: 'Gandhi Nagar' },
+  { city: 'Kurnool', state: 'Andhra Pradesh', district: 'Kurnool', lat: 15.8281, lng: 78.0373, wardCode: 'KNL', wardName: 'Main Road' },
+  { city: 'Vijayawada', state: 'Andhra Pradesh', district: 'NTR', lat: 16.5062, lng: 80.648, wardCode: 'NTR', wardName: 'Benz Circle' },
+  { city: 'Ongole', state: 'Andhra Pradesh', district: 'Prakasam', lat: 15.5053, lng: 80.0949, wardCode: 'PKM', wardName: 'Gandhi Nagar' },
+  { city: 'Nellore', state: 'Andhra Pradesh', district: 'Sri Potti Sriramulu Nellore', lat: 14.4426, lng: 79.9865, wardCode: 'NLR', wardName: 'Venkateswara Nagar' },
+  { city: 'Srikakulam', state: 'Andhra Pradesh', district: 'Sri Srikakulam', lat: 18.3349, lng: 83.9025, wardCode: 'SKM', wardName: 'Pedda Junction' },
   { city: 'Visakhapatnam', state: 'Andhra Pradesh', district: 'Visakhapatnam', lat: 17.6868, lng: 83.2185, wardCode: 'VZM', wardName: 'MVP Colony' },
-  { city: 'Vijayawada', state: 'Andhra Pradesh', district: 'NTR', lat: 16.5062, lng: 80.648, wardCode: 'VJA', wardName: 'Benz Circle' },
-  { city: 'Hyderabad', state: 'Telangana', district: 'Hyderabad', lat: 17.385, lng: 78.4867, wardCode: 'HYD', wardName: 'Gachibowli' },
-  { city: 'Bengaluru', state: 'Karnataka', district: 'Bengaluru Urban', lat: 12.9716, lng: 77.5946, wardCode: 'BLR', wardName: 'Whitefield' },
-  { city: 'Hubballi', state: 'Karnataka', district: 'Dharwad', lat: 15.3647, lng: 75.124, wardCode: 'HBB', wardName: 'Hubballi East' },
-  { city: 'Pune', state: 'Maharashtra', district: 'Pune', lat: 18.5204, lng: 73.8567, wardCode: 'PUN', wardName: 'Kothrud' },
-  { city: 'Mumbai', state: 'Maharashtra', district: 'Mumbai Suburban', lat: 19.076, lng: 72.8777, wardCode: 'BOM', wardName: 'Andheri East' },
-  { city: 'Delhi', state: 'Delhi', district: 'South Delhi', lat: 28.6139, lng: 77.209, wardCode: 'DEL', wardName: 'Saket' },
-  { city: 'Chennai', state: 'Tamil Nadu', district: 'Chennai', lat: 13.0827, lng: 80.2707, wardCode: 'MAA', wardName: 'Adyar' },
-  { city: 'Kolkata', state: 'West Bengal', district: 'Kolkata', lat: 22.5726, lng: 88.3639, wardCode: 'CCU', wardName: 'New Town' },
-  { city: 'Jaipur', state: 'Rajasthan', district: 'Jaipur', lat: 26.9124, lng: 75.7873, wardCode: 'JAI', wardName: 'Malviya Nagar' },
-  { city: 'Lucknow', state: 'Uttar Pradesh', district: 'Lucknow', lat: 26.8467, lng: 80.9462, wardCode: 'LKO', wardName: 'Alambagh' },
-  { city: 'Kochi', state: 'Kerala', district: 'Ernakulam', lat: 9.9312, lng: 76.2673, wardCode: 'COK', wardName: 'Kadavanthra' },
-  { city: 'Guwahati', state: 'Assam', district: 'Kamrup Metropolitan', lat: 26.1445, lng: 91.7362, wardCode: 'GAU', wardName: 'Uzan Bazar' },
-  { city: 'Bhubaneswar', state: 'Odisha', district: 'Khordha', lat: 20.2961, lng: 85.8245, wardCode: 'BBS', wardName: 'Swaraj Vihar' },
-  { city: 'Ahmedabad', state: 'Gujarat', district: 'Ahmedabad', lat: 23.0225, lng: 72.5714, wardCode: 'AMD', wardName: 'Maninagar' },
+  { city: 'Vizianagaram', state: 'Andhra Pradesh', district: 'Vizianagaram', lat: 18.1132, lng: 83.5977, wardCode: 'VZN', wardName: 'Fort Area' },
+  { city: 'Kadapa', state: 'Andhra Pradesh', district: 'YSR Kadapa', lat: 14.4674, lng: 78.8241, wardCode: 'KDP', wardName: 'YSR Statue' },
 ];
 
 interface CategoryProfile {

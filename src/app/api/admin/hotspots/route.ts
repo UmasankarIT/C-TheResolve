@@ -4,11 +4,15 @@ import { getSession, isRole, unauthorized, denied } from '@/lib/auth';
 import {
   buildHotspots,
   buildCategoryDemand,
+  buildStateDemand,
+  buildDistrictDemand,
+  buildNationalSummary,
   buildRecommendations,
   buildPromptContext,
   isOpenIssue,
 } from '@/lib/demand';
 import { generateDemandRecommendations } from '@/lib/gemini';
+import { getDistrictIndicators } from '@/lib/publicData';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,12 +36,15 @@ export async function GET(req: NextRequest) {
   const openIssues = issues.filter(isOpenIssue);
   const hotspots = buildHotspots(openIssues);
   const categoryDemand = buildCategoryDemand(openIssues);
+  const stateDemand = buildStateDemand(openIssues, hotspots);
+  const districtDemand = buildDistrictDemand(openIssues, hotspots);
+  const national = buildNationalSummary(openIssues, hotspots, stateDemand, categoryDemand);
 
   let recommendations = buildRecommendations(hotspots, departments, issues);
   let mode: 'gemini' | 'heuristic' = 'heuristic';
 
   if (openIssues.length > 0) {
-    const promptContext = buildPromptContext(openIssues, hotspots, categoryDemand);
+    const promptContext = buildPromptContext(openIssues, hotspots, categoryDemand, stateDemand, districtDemand);
     const ai = await generateDemandRecommendations(promptContext);
     if (ai && ai.length > 0) {
       mode = 'gemini';
@@ -65,18 +72,36 @@ export async function GET(req: NextRequest) {
 
   const totalUpvotes = openIssues.reduce((acc, i) => acc + i.communityUpvotes, 0);
 
+  // Real government demographics, when a portal key + resource are configured.
+  // Unavailable or unreachable simply means the fusion falls back to the
+  // curated baseline — the endpoint never fails because of an external feed.
+  const publicData = await getDistrictIndicators(districtDemand.map((d) => d.district));
+
   return NextResponse.json({
     generatedAt: new Date().toISOString(),
     mode,
-    dataSources: ['citizen_reports', 'static_contextual_risk', ...(mode === 'gemini' ? ['gemini_ai'] : [])],
+    dataSources: [
+      'citizen_reports',
+      'static_contextual_risk',
+      'state_rollup',
+      'district_rollup',
+      ...(publicData.indicators.length > 0 ? ['data.gov.in'] : []),
+      ...(mode === 'gemini' ? ['gemini_ai'] : []),
+    ],
     counts: {
       totalOpen: openIssues.length,
       totalResolved: issues.length - openIssues.length,
       totalUpvotes,
       hotspotCount: hotspots.length,
+      stateCount: national.statesCovered,
+      districtCount: national.districtsCovered,
     },
     hotspots,
     recommendations,
     categoryDemand,
+    stateDemand,
+    districtDemand,
+    publicData,
+    national,
   });
 }
