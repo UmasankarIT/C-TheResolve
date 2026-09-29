@@ -24,6 +24,8 @@ node_modules/
 .next/
 out/
 build/
+!src/app/api/admin/demand-signals/build/
+!src/app/api/admin/demand-signals/build/**
 dist/
 coverage/
 *.tsbuildinfo
