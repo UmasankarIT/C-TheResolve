@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Issue, IssueStatus, Category, Department, AuthUser } from '@/lib/types';
 import { StatusPill } from './StatusPill';
+import { DemandSignalsPanel } from './DemandSignalsPanel';
 import {
   Hotspot,
   HotspotsData,
@@ -691,21 +692,27 @@ function ScoreBar({ score }: { score: number }) {
 function PolicymakerSection({ data, loading }: { data: HotspotsData | null; loading: boolean }) {
   if (loading && !data) {
     return (
-      <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center flex items-center justify-center space-x-2">
-        <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
-        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Computing demand hotspots…</p>
+      <div className="space-y-4">
+        <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center flex items-center justify-center space-x-2">
+          <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Computing demand hotspots…</p>
+        </div>
+        <DemandSignalsPanel />
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center">
-        <MapPinned className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
-        <p className="mt-3 text-sm font-semibold">No demand data yet</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Reports submitted by citizens are clustered into hotspots here, then ranked into recommended public projects.
-        </p>
+      <div className="space-y-4">
+        <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center">
+          <MapPinned className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+          <p className="mt-3 text-sm font-semibold">No demand data yet</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Reports submitted by citizens are clustered into hotspots here, then ranked into recommended public projects.
+          </p>
+        </div>
+        <DemandSignalsPanel />
       </div>
     );
   }
@@ -927,6 +934,8 @@ function PolicymakerSection({ data, loading }: { data: HotspotsData | null; load
           </div>
         </div>
       )}
+
+      <DemandSignalsPanel />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, TaskType } from '@google/generative-ai';
 import { analyzeIssueImage } from './mlVision';
 import { MLAnalysis } from './types';
 
@@ -35,6 +35,14 @@ function geminiApiKey(): string | undefined {
 
 const MODEL_CANDIDATES = ['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-flash-latest'];
 
+// Embedding models are a separate catalog from the generation models above —
+// the same key can call a generation model and get a 404 from the other list —
+// so they get their own candidates and their own remembered winner. The
+// dimension differs per model (text-embedding-004 emits 768, gemini-embedding-001
+// emits 3072), which is why the caller records the model name alongside each
+// vector instead of assuming a fixed width.
+const EMBEDDING_MODEL_CANDIDATES = ['text-embedding-004', 'text-embedding-005', 'gemini-embedding-001'];
+
 const TRANSIENT_RETRY_DELAYS = [0, 500, 1500];
 
 type GeminiPart = string | { inlineData: { data: string; mimeType: string } };
@@ -42,7 +50,9 @@ type GeminiPart = string | { inlineData: { data: string; mimeType: string } };
 // Remembered across requests: the first model that actually answers wins, so we
 // stop paying for dead model names on every call.
 let workingModel: string | null = null;
+let workingEmbeddingModel: string | null = null;
 let discoveredModels: string[] | null = null;
+let discoveredEmbeddingModels: string[] | null = null;
 
 function isModelUnavailable(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -341,5 +351,257 @@ Return a valid JSON object strictly matching this schema:
   } catch (error) {
     console.error('[Gemini Service] Voice note transcription failed:', error);
     return empty;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Demand-signal pipeline support
+//
+// Three calls, in the order the pipeline uses them: embed the complaint text,
+// extract the structured fields a complaint is bucketed on, then verify and
+// summarise a proposed cluster. All three return null / an `unavailable`
+// engine marker rather than throwing, so the pipeline degrades to
+// deterministic behaviour instead of failing a build outright.
+// ---------------------------------------------------------------------------
+
+export interface EmbeddingBatch {
+  model: string;
+  dimensions: number;
+  vectors: number[][];
+}
+
+/**
+ * Asks the API which models this key can actually embed with. Mirrors
+ * discoverModels() but filters on embedContent instead of generateContent, so a
+ * hardcoded embedding model name can never permanently break the pipeline the
+ * same way a retired generation model would.
+ */
+async function discoverEmbeddingModels(apiKey: string): Promise<string[]> {
+  if (discoveredEmbeddingModels) return discoveredEmbeddingModels;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(apiKey)}`
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      models?: { name?: string; supportedGenerationMethods?: string[] }[];
+    };
+    discoveredEmbeddingModels = (data.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('embedContent'))
+      .map((m) => String(m.name || '').replace(/^models\//, ''))
+      .filter(Boolean)
+      .slice(0, 6);
+    return discoveredEmbeddingModels;
+  } catch {
+    return [];
+  }
+}
+
+async function callEmbeddingModel(
+  genAI: GoogleGenerativeAI,
+  modelName: string,
+  texts: string[],
+  signal?: AbortSignal
+): Promise<EmbeddingBatch> {
+  const model = genAI.getGenerativeModel({ model: modelName });
+  // CLUSTERING is the task type tuned for "these texts are about the same
+  // thing" rather than retrieval, which is the question stage 3 asks.
+  const requests = texts.map((text) => ({
+    content: { role: 'user', parts: [{ text }] },
+    taskType: TaskType.CLUSTERING,
+  }));
+  const result = signal
+    ? await model.batchEmbedContents({ requests }, { signal })
+    : await model.batchEmbedContents({ requests });
+
+  const vectors = (result.embeddings || [])
+    .map((e) => e.values)
+    .filter((v): v is number[] => Array.isArray(v) && v.length > 0);
+
+  // A short response means the API silently dropped rows. Returning a
+  // half-filled batch would misalign vectors with complaints, so treat it as
+  // a failure and let the caller fall back.
+  if (vectors.length !== texts.length) {
+    throw new Error(`Embedding model ${modelName} returned ${vectors.length}/${texts.length} vectors`);
+  }
+
+  return { model: modelName, dimensions: vectors[0].length, vectors };
+}
+
+/**
+ * Stage 2 of the demand-signal pipeline: embed the normalised English text of
+ * each complaint. Returns null when no key is configured or every candidate
+ * model fails, and the caller then falls back to the vectors already stored on
+ * the complaint rows.
+ */
+export async function embedComplaintTexts(texts: string[]): Promise<EmbeddingBatch | null> {
+  if (texts.length === 0) return null;
+  const apiKey = geminiApiKey();
+  if (!apiKey) return null;
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const order = workingEmbeddingModel
+    ? [workingEmbeddingModel, ...EMBEDDING_MODEL_CANDIDATES.filter((m) => m !== workingEmbeddingModel)]
+    : EMBEDDING_MODEL_CANDIDATES;
+  const attempts = [...order, ...(await discoverEmbeddingModels(apiKey))];
+  let lastError: unknown;
+
+  for (const modelName of attempts) {
+    for (let attempt = 0; attempt < TRANSIENT_RETRY_DELAYS.length; attempt++) {
+      const delay = TRANSIENT_RETRY_DELAYS[attempt];
+      if (delay > 0) await sleep(delay);
+      try {
+        const batch = await callEmbeddingModel(genAI, modelName, texts);
+        workingEmbeddingModel = modelName;
+        return batch;
+      } catch (error) {
+        lastError = error;
+        if (isModelUnavailable(error)) break;
+        if (!isTransientError(error)) break;
+        if (attempt === TRANSIENT_RETRY_DELAYS.length - 1) break;
+      }
+    }
+  }
+
+  console.error('[Gemini Service] Embedding call failed for all candidate models:', lastError);
+  return null;
+}
+
+export interface ComplaintExtraction {
+  issueType: string;
+  locationState: string;
+  locationDistrict: string;
+  locationWard: string;
+  urgencyScore: number;
+  urgencyReason: string;
+  originalLanguage: string;
+  originalText: string;
+  translatedText: string;
+}
+
+/**
+ * Normalises a raw citizen account into the structured complaint record the
+ * pipeline buckets on. The city/district/ward the report was filed with are
+ * passed in as the authoritative answer when present — a geocoder already
+ * resolved them server-side, and a language model must not be allowed to
+ * relabel a complaint into a neighbouring district and merge it with the
+ * wrong bucket. Gemini's job here is the parts we genuinely do not know:
+ * issue type from free text, urgency, the language spoken, and a faithful
+ * English translation.
+ */
+export async function extractComplaintFields(
+  input: {
+    rawText: string;
+    transcript?: string;
+    categoryName: string;
+    knownState?: string;
+    knownDistrict?: string;
+    knownWard?: string;
+  }
+): Promise<ComplaintExtraction | null> {
+  const apiKey = geminiApiKey();
+  if (!apiKey) return null;
+
+  const prompt = `You are the intake normalisation service for CivicResolve, an Indian civic infrastructure grievance platform. Turn one citizen's complaint into a structured record.
+
+Citizen's own words: "${input.rawText || '(none typed)'}"
+
+Voice transcript, if any: "${input.transcript || '(none)'}"
+
+The report was filed under the platform category: ${input.categoryName}.
+Geocoding already resolved the location — treat these as ground truth and do not contradict them:
+  state: ${input.knownState || 'unknown'}
+  district: ${input.knownDistrict || 'unknown'}
+  ward / mandal: ${input.knownWard || 'unknown'}
+
+Return a valid JSON object strictly matching this schema:
+{
+  "issue_type": string, // slug of the underlying problem, e.g. "pot_hole", "open_manhole", "garbage_dump", "street_light_outage", "water_pipe_burst", "sewage_overflow". Must describe the problem itself, not the location.
+  "location_state": string, // copy the state above verbatim, or "unknown"
+  "location_district": string, // copy the district above verbatim, or "unknown"
+  "location_ward": string, // copy the ward above verbatim, or "unknown"
+  "urgency_score": number, // 1.00 (low inconvenience) to 5.00 (immediate danger to life: open manhole, live wire, collapsing wall, contaminated water)
+  "urgency_reason": string, // one short sentence justifying the score
+  "original_language": string, // name of the language the citizen wrote or spoke in, e.g. "Hindi", "Tamil", "Telugu", "Kannada", "Bengali", "Marathi", "Gujarati", "English", "Hinglish". Use "English" if the text is already English.
+  "original_text": string, // the citizen's words, unedited, in their own language
+  "translated_text": string, // faithful English translation of original_text, phrased the way a municipal officer would write it. If original_text is already English, copy it.
+}`;
+
+  try {
+    const parsed = await generateJson(apiKey, [prompt]);
+    if (!parsed || typeof parsed.issue_type !== 'string') return null;
+
+    const urgency = Number(parsed.urgency_score);
+    return {
+      issueType: String(parsed.issue_type).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+      locationState: String(parsed.location_state || input.knownState || '').trim(),
+      locationDistrict: String(parsed.location_district || input.knownDistrict || '').trim(),
+      locationWard: String(parsed.location_ward || input.knownWard || '').trim(),
+      urgencyScore: Number.isFinite(urgency) ? Math.min(5, Math.max(1, Number(urgency.toFixed(2)))) : 3,
+      urgencyReason: String(parsed.urgency_reason || '').trim(),
+      originalLanguage: String(parsed.original_language || 'Unknown').trim() || 'Unknown',
+      originalText: String(parsed.original_text || input.rawText || '').trim(),
+      translatedText: String(parsed.translated_text || input.rawText || '').trim(),
+    };
+  } catch (error) {
+    console.error('[Gemini Service] Complaint field extraction failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Stage 4 of the demand-signal pipeline. The clustering stage works on
+ * embedding similarity alone, which happily merges "water is pooling on
+ * Main Road" with "a manhole is open near the same stretch" because both sit
+ * near each other in vector space. This pass asks the model to confirm the
+ * merge actually describes one underlying problem and, if so, to write the
+ * single sentence a policymaker will read.
+ *
+ * Returns one verdict per complaint id. A complaint the model rejects is
+ * split out by the caller into its own cluster. Returns null when Gemini is
+ * unavailable, which the caller treats as "accept the cluster as proposed"
+ * and summarises deterministically.
+ */
+export async function verifyClusterMembers(
+  members: { id: string; translatedText: string; originalText: string }[]
+): Promise<{ verdicts: Map<string, boolean>; summary: string } | null> {
+  if (members.length < 2) return null;
+  const apiKey = geminiApiKey();
+  if (!apiKey) return null;
+
+  const listing = members
+    .map((m, i) => `[${i + 1}] id=${m.id}\nEnglish: ${m.translatedText || m.originalText}`)
+    .join('\n\n');
+
+  const prompt = `These citizen complaints were grouped as describing the same underlying issue. Confirm if they truly describe the same problem (yes/no). If yes, write one plain-language sentence a policymaker could read summarizing the issue.
+
+Complaints:
+${listing}
+
+Return a valid JSON object strictly matching this schema:
+{
+  "membership": [
+    { "id": string, "same_issue": boolean } // one entry per complaint above, exact id
+  ],
+  "summary": string // required when every member is the same issue: ONE sentence a city policymaker could read, naming the problem and its location. Empty string if the members disagree.
+}`;
+
+  try {
+    const parsed = await generateJson(apiKey, [prompt]);
+    const rows = Array.isArray(parsed?.membership) ? parsed.membership : [];
+    const verdicts = new Map<string, boolean>();
+    for (const row of rows) {
+      if (row && typeof row.id === 'string') {
+        verdicts.set(row.id, row.same_issue !== false);
+      }
+    }
+    // A response that omits complaints is not a usable verdict — treating the
+    // missing ones as confirmed would silently keep a bad merge.
+    if (verdicts.size < members.length) return null;
+
+    return { verdicts, summary: String(parsed.summary || '').trim() };
+  } catch (error) {
+    console.error('[Gemini Service] Cluster verification failed:', error);
+    return null;
   }
 }

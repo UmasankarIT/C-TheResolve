@@ -2,6 +2,8 @@ import {
   AppNotification,
   AuditLogEntry,
   Category,
+  Complaint,
+  DemandSignal,
   Department,
   Issue,
   IssueReport,
@@ -12,6 +14,7 @@ import { findNearbyActiveIssue } from './spatial';
 import { DEFAULT_DEPARTMENTS } from './departments';
 import { INITIAL_CATEGORIES } from './categories';
 import { buildSeedIssues } from './seedIssues';
+import { withDistrictStatistics } from './districtReference';
 import { CivicStore, IssueStatusUpdate, ReassignRequest } from './civicStore';
 import { PostgresStore } from './postgresStore';
 
@@ -28,6 +31,8 @@ class MemoryStore implements CivicStore {
   private auditLogs: AuditLogEntry[] = [];
   private upvoteKeys = new Set<string>();
   private proofOfWork: ProofOfWork[] = [];
+  private complaints = new Map<string, Complaint>();
+  private demandSignals: DemandSignal[] = [];
 
   constructor() {
     this.issues = buildSeedIssues();
@@ -244,6 +249,46 @@ class MemoryStore implements CivicStore {
 
   async getAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
     return this.auditLogs.slice(0, limit);
+  }
+
+  // --- Complaints and demand signals ---------------------------------------
+
+  async listComplaints(options: { withEmbeddings?: boolean } = {}): Promise<Complaint[]> {
+    const rows = Array.from(this.complaints.values());
+    if (options.withEmbeddings === false) {
+      return rows.map(({ embedding, embeddingDimensions, ...rest }) => rest);
+    }
+    return rows;
+  }
+
+  async upsertComplaints(complaints: Complaint[]): Promise<number> {
+    for (const complaint of complaints) this.complaints.set(complaint.id, complaint);
+    return complaints.length;
+  }
+
+  async setComplaintEmbedding(id: string, embedding: number[], model: string): Promise<void> {
+    const complaint = this.complaints.get(id);
+    if (!complaint) return;
+    // A rebuild re-derives every complaint from the issues table, which drops
+    // the vector; carry it forward so an unchanged corpus is not re-embedded
+    // on every build.
+    this.complaints.set(id, {
+      ...complaint,
+      embedding,
+      embeddingModel: model,
+      embeddingDimensions: embedding.length,
+    });
+  }
+
+  async replaceDemandSignals(signals: DemandSignal[]): Promise<void> {
+    // Same Step 4 fusion as the Postgres store, applied at the same boundary:
+    // the in-memory store must produce the same fused rows or swapping DATABASE_URL
+    // on or off would change what demand signals carry.
+    this.demandSignals = withDistrictStatistics(signals.map((s) => ({ ...s })));
+  }
+
+  async listDemandSignals(): Promise<DemandSignal[]> {
+    return [...this.demandSignals].sort((a, b) => b.volume - a.volume || a.clusterId.localeCompare(b.clusterId));
   }
 
   async withTransaction<T>(fn: () => Promise<T>): Promise<T> {

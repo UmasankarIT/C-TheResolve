@@ -7,13 +7,18 @@ import { DEFAULT_DEPARTMENTS } from './departments';
 import { getPool, query } from './db';
 import { calculatePriorityScore } from './scoring';
 import { buildSeedIssues, SEED_CITIES } from './seedIssues';
+import { districtStatistics, withDistrictStatistics } from './districtReference';
 import {
   AppNotification,
   AuditLogEntry,
   Category,
+  Complaint,
+  DemandSignal,
   Department,
   Issue,
   IssueReport,
+  LocationGranularity,
+  PipelineEngine,
   ProofOfWork,
 } from './types';
 
@@ -239,6 +244,114 @@ function toDepartment(r: Record<string, unknown>): Department {
 }
 
 // ---------------------------------------------------------------------------
+// Complaints and demand signals.
+//
+// pgvector has no node-pg type parser, so a `vector` column arrives as its
+// text form ('[0.1,0.2]') and is parsed here. It is cast to text in SQL rather
+// than left to pg so the parse is explicit and a malformed value is visible
+// instead of surfacing as an opaque driver error.
+// ---------------------------------------------------------------------------
+
+interface ComplaintRow {
+  id: string;
+  sourceIssueId: string | null;
+  sourceReportId: string | null;
+  issueType: string;
+  locationState: string | null;
+  locationDistrict: string | null;
+  locationWard: string | null;
+  location: string;
+  locationGranularity: string;
+  urgencyScore: string;
+  urgencyReason: string | null;
+  originalLanguage: string;
+  originalText: string;
+  translatedText: string;
+  embedding: string | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  extractionEngine: string;
+  createdAt: Date;
+}
+
+interface DemandSignalRow {
+  clusterId: string;
+  issueType: string;
+  location: string;
+  locationState: string | null;
+  locationDistrict: string | null;
+  locationWard: string | null;
+  memberComplaintIds: string[];
+  volume: number;
+  avgUrgency: string;
+  summary: string;
+  languagesRepresented: string[];
+  similarityThreshold: string;
+  verificationEngine: string;
+  populationAffected: string | null;
+  existingInfrastructureGap: string | null;
+  dataFusionSource: string | null;
+  createdAt: Date;
+}
+
+function parseVector(raw: string | null | undefined): number[] | undefined {
+  if (raw == null) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return undefined;
+  const body = trimmed.slice(1, -1).trim();
+  if (!body) return [];
+  const values = body.split(',').map((x) => Number(x.trim()));
+  return values.every((v) => Number.isFinite(v)) ? values : undefined;
+}
+
+function toComplaint(r: ComplaintRow): Complaint {
+  return {
+    id: r.id,
+    sourceIssueId: r.sourceIssueId ?? undefined,
+    sourceReportId: r.sourceReportId ?? undefined,
+    issueType: r.issueType,
+    locationState: r.locationState ?? undefined,
+    locationDistrict: r.locationDistrict ?? undefined,
+    locationWard: r.locationWard ?? undefined,
+    location: r.location,
+    locationGranularity: r.locationGranularity as LocationGranularity,
+    urgencyScore: Number(r.urgencyScore),
+    urgencyReason: r.urgencyReason ?? undefined,
+    originalLanguage: r.originalLanguage,
+    originalText: r.originalText,
+    translatedText: r.translatedText,
+    embedding: parseVector(r.embedding),
+    embeddingModel: r.embeddingModel ?? undefined,
+    embeddingDimensions: r.embeddingDimensions ?? undefined,
+    extractionEngine: r.extractionEngine as PipelineEngine,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+function toDemandSignal(r: DemandSignalRow): DemandSignal {
+  return {
+    clusterId: r.clusterId,
+    issueType: r.issueType,
+    location: r.location,
+    locationState: r.locationState ?? undefined,
+    locationDistrict: r.locationDistrict ?? undefined,
+    locationWard: r.locationWard ?? undefined,
+    memberComplaintIds: r.memberComplaintIds ?? [],
+    volume: Number(r.volume),
+    avgUrgency: Number(r.avgUrgency),
+    summary: r.summary,
+    languagesRepresented: r.languagesRepresented ?? [],
+    similarityThreshold: Number(r.similarityThreshold),
+    verificationEngine: r.verificationEngine as PipelineEngine,
+    populationAffected: r.populationAffected == null ? null : Number(r.populationAffected),
+    existingInfrastructureGap:
+      r.existingInfrastructureGap == null ? null : Number(r.existingInfrastructureGap),
+    dataFusionSource: r.dataFusionSource ?? null,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+// ---------------------------------------------------------------------------
 
 export class PostgresStore implements CivicStore {
   private readyPromise: Promise<void> | null = null;
@@ -434,7 +547,7 @@ export class PostgresStore implements CivicStore {
       );
     }
 
-    for (const dept of DEFAULT_DEPARTMENTS) {
+for (const dept of DEFAULT_DEPARTMENTS) {
       await this.q(
         `INSERT INTO departments
            (id, code, name, nodal_officer, sla_hours, disabled, category_codes)
@@ -448,6 +561,50 @@ export class PostgresStore implements CivicStore {
            category_codes = EXCLUDED.category_codes,
            updated_at = CURRENT_TIMESTAMP`,
         [dept.id, dept.code, dept.name, dept.nodalOfficer, dept.slaHours, dept.disabled, dept.categoryCodes]
+      );
+    }
+
+    // Step 4 reference data: upload the district table from its single source
+    // of truth (database/data/district_reference.csv) so it is queryable here,
+    // alongside the Postgres schema, and so an edit to the CSV shows up on the
+    // next boot. Rows are keyed on (state, district) — the same granularity the
+    // pipeline buckets on — which is what makes the fusion join a plain lookup.
+    const statistics = districtStatistics();
+    if (statistics.length > 0) {
+      const columns = 10;
+      const values: unknown[] = [];
+      const tuples = statistics.map((s, row) => {
+        const base = row * columns;
+        values.push(
+          s.state,
+          s.district,
+          s.censusDistrict ?? null,
+          s.population,
+          s.infrastructureGap,
+          s.populationSource,
+          s.populationSourceUrl,
+          s.infrastructureGapSource ?? null,
+          s.infrastructureGapSourceUrl ?? null,
+          s.note ?? null
+        );
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10})`;
+      });
+      await this.q(
+        `INSERT INTO location_statistics
+           (state, district, census_district, population, infrastructure_gap,
+            population_source, population_source_url, infrastructure_gap_source,
+            infrastructure_gap_source_url, note)
+         VALUES ${tuples.join(', ')}
+         ON CONFLICT (state, district) DO UPDATE SET
+           census_district = EXCLUDED.census_district,
+           population = EXCLUDED.population,
+           infrastructure_gap = EXCLUDED.infrastructure_gap,
+           population_source = EXCLUDED.population_source,
+           population_source_url = EXCLUDED.population_source_url,
+           infrastructure_gap_source = EXCLUDED.infrastructure_gap_source,
+           infrastructure_gap_source_url = EXCLUDED.infrastructure_gap_source_url,
+           note = EXCLUDED.note`,
+        values
       );
     }
   }
@@ -975,6 +1132,189 @@ export class PostgresStore implements CivicStore {
       detail: r.detail ?? '',
       createdAt: r.createdAt.toISOString(),
     }));
+  }
+
+  // --- Complaints and demand signals ---------------------------------------
+
+  async listComplaints(options: { withEmbeddings?: boolean } = {}): Promise<Complaint[]> {
+    await this.ensureReady();
+    const embeddingColumn = options.withEmbeddings === false ? 'NULL::text AS embedding' : 'embedding::text AS embedding';
+    const { rows } = await this.q<ComplaintRow>(
+      `SELECT id,
+              source_issue_id AS "sourceIssueId",
+              source_report_id AS "sourceReportId",
+              issue_type AS "issueType",
+              location_state AS "locationState",
+              location_district AS "locationDistrict",
+              location_ward AS "locationWard",
+              location,
+              location_granularity AS "locationGranularity",
+              urgency_score AS "urgencyScore",
+              urgency_reason AS "urgencyReason",
+              original_language AS "originalLanguage",
+              original_text AS "originalText",
+              translated_text AS "translatedText",
+              ${embeddingColumn},
+              embedding_model AS "embeddingModel",
+              embedding_dimensions AS "embeddingDimensions",
+              extraction_engine AS "extractionEngine",
+              created_at AS "createdAt"
+         FROM complaints
+        ORDER BY id`
+    );
+    return rows.map(toComplaint);
+  }
+
+  async upsertComplaints(complaints: Complaint[]): Promise<number> {
+    await this.ensureReady();
+    if (complaints.length === 0) return 0;
+
+    // One multi-row INSERT rather than N round trips: a full rebuild touches
+    // every complaint in the corpus, and at a few hundred rows the per-statement
+    // latency dominates everything else in the build.
+    const columns = 15;
+    const values: unknown[] = [];
+    const tuples = complaints.map((c, row) => {
+      const base = row * columns;
+      values.push(
+        c.id,
+        c.sourceIssueId ?? null,
+        c.sourceReportId ?? null,
+        c.issueType,
+        c.locationState ?? null,
+        c.locationDistrict ?? null,
+        c.locationWard ?? null,
+        c.location,
+        c.locationGranularity,
+        c.urgencyScore,
+        c.urgencyReason ?? null,
+        c.originalLanguage,
+        c.originalText,
+        c.translatedText,
+        c.extractionEngine
+      );
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}, $${base + 13}, $${base + 14}, $${base + 15})`;
+    });
+
+    await this.q(
+      `INSERT INTO complaints
+         (id, source_issue_id, source_report_id, issue_type, location_state,
+          location_district, location_ward, location, location_granularity,
+          urgency_score, urgency_reason, original_language, original_text,
+          translated_text, extraction_engine)
+       VALUES ${tuples.join(', ')}
+       ON CONFLICT (id) DO UPDATE SET
+         source_issue_id = EXCLUDED.source_issue_id,
+         source_report_id = EXCLUDED.source_report_id,
+         issue_type = EXCLUDED.issue_type,
+         location_state = EXCLUDED.location_state,
+         location_district = EXCLUDED.location_district,
+         location_ward = EXCLUDED.location_ward,
+         location = EXCLUDED.location,
+         location_granularity = EXCLUDED.location_granularity,
+         urgency_score = EXCLUDED.urgency_score,
+         urgency_reason = EXCLUDED.urgency_reason,
+         original_language = EXCLUDED.original_language,
+         original_text = EXCLUDED.original_text,
+         translated_text = EXCLUDED.translated_text,
+         extraction_engine = EXCLUDED.extraction_engine,
+         updated_at = CURRENT_TIMESTAMP`,
+      values
+    );
+    return complaints.length;
+  }
+
+  async setComplaintEmbedding(id: string, embedding: number[], model: string): Promise<void> {
+    await this.ensureReady();
+    // The dimension is read back off the vector rather than passed in, so the
+    // recorded value cannot drift from the data the column actually holds.
+    // pgvector's text input format is "[1,2,3]", NOT the "{1,2,3}" Postgres
+    // array literal the two look alike; the array form is rejected with
+    // 'Vector contents must start with "["'. vector_dims() is used rather than
+    // array_length($2::real[], 1) because casting to real[] would need the
+    // array form and so fails for the same reason.
+    await this.q(
+      `UPDATE complaints
+          SET embedding = $2::vector,
+              embedding_model = $3,
+              embedding_dimensions = vector_dims($2::vector),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1`,
+      [id, `[${embedding.join(',')}]`, model]
+    );
+  }
+
+  async replaceDemandSignals(signals: DemandSignal[]): Promise<void> {
+    await this.ensureReady();
+
+    // Step 4 data fusion runs at the persistence boundary so a stored signal
+    // always carries its district's real population and infrastructure gap,
+    // and a caller that skipped fusion cannot quietly write unfused rows.
+    const fused = withDistrictStatistics(signals);
+
+    await this.q('DELETE FROM demand_signals');
+    if (fused.length === 0) return;
+
+    const columns = 16;
+    const values: unknown[] = [];
+    const tuples = fused.map((s, row) => {
+      const base = row * columns;
+      values.push(
+        s.clusterId,
+        s.issueType,
+        s.location,
+        s.locationState ?? null,
+        s.locationDistrict ?? null,
+        s.locationWard ?? null,
+        s.memberComplaintIds,
+        s.volume,
+        s.avgUrgency,
+        s.summary,
+        s.languagesRepresented,
+        s.similarityThreshold,
+        s.verificationEngine,
+        s.populationAffected ?? null,
+        s.existingInfrastructureGap ?? null,
+        s.dataFusionSource ?? null
+      );
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}, $${base + 13}, $${base + 14}, $${base + 15}, $${base + 16})`;
+    });
+
+    await this.q(
+      `INSERT INTO demand_signals
+         (cluster_id, issue_type, location, location_state, location_district,
+          location_ward, member_complaint_ids, volume, avg_urgency, summary,
+          languages_represented, similarity_threshold, verification_engine,
+          population_affected, existing_infrastructure_gap, data_fusion_source)
+       VALUES ${tuples.join(', ')}`,
+      values
+    );
+  }
+
+  async listDemandSignals(): Promise<DemandSignal[]> {
+    await this.ensureReady();
+    const { rows } = await this.q<DemandSignalRow>(
+      `SELECT cluster_id AS "clusterId",
+              issue_type AS "issueType",
+              location,
+              location_state AS "locationState",
+              location_district AS "locationDistrict",
+              location_ward AS "locationWard",
+              member_complaint_ids AS "memberComplaintIds",
+              volume,
+              avg_urgency AS "avgUrgency",
+              summary,
+              languages_represented AS "languagesRepresented",
+              similarity_threshold AS "similarityThreshold",
+              verification_engine AS "verificationEngine",
+              population_affected AS "populationAffected",
+              existing_infrastructure_gap AS "existingInfrastructureGap",
+              data_fusion_source AS "dataFusionSource",
+              created_at AS "createdAt"
+         FROM demand_signals
+        ORDER BY volume DESC, cluster_id ASC`
+    );
+    return rows.map(toDemandSignal);
   }
 
   // --- Transactions --------------------------------------------------------

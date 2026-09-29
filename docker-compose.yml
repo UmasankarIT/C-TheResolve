@@ -30,7 +30,13 @@ services:
       - "3010:8080"
 
   civic-postgres:
-    image: postgis/postgis:16-3.4
+    # Custom image (database/Dockerfile): PostGIS + pgvector in one server.
+    # Both extensions are required — issues.location is GEOGRAPHY, and
+    # complaints.embedding is `vector`. Neither upstream base image has both.
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    image: civicresolve-postgres:16-postgis-pgvector
     container_name: civicresolve_postgres
     restart: unless-stopped
     environment:

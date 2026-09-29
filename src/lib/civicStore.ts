@@ -2,6 +2,8 @@ import {
   AppNotification,
   AuditLogEntry,
   Category,
+  Complaint,
+  DemandSignal,
   Department,
   Issue,
   IssueReport,
@@ -74,6 +76,25 @@ export interface CivicStore {
 
   addAuditLog(entry: AuditLogEntry): Promise<void>;
   getAuditLogs(limit?: number): Promise<AuditLogEntry[]>;
+
+  /**
+   * Complaints in the shape the demand-signal pipeline buckets on. Embeddings
+   * are included by default because stage 3 needs them; a caller that only
+   * wants the corpus for display can skip them, which matters once the
+   * vectors are 768 floats a row.
+   */
+  listComplaints(options?: { withEmbeddings?: boolean }): Promise<Complaint[]>;
+  upsertComplaints(complaints: Complaint[]): Promise<number>;
+  setComplaintEmbedding(id: string, embedding: number[], model: string): Promise<void>;
+
+  /**
+   * Demand signals are a derived view, not a log: every build recomputes the
+   * whole set from the complaints, so the store replaces the previous run
+   * rather than diffing against it. A complaint that no longer clusters into
+   * any signal must not linger from an earlier build.
+   */
+  replaceDemandSignals(signals: DemandSignal[]): Promise<void>;
+  listDemandSignals(): Promise<DemandSignal[]>;
 
   /** All statements executed inside fn share one transaction when supported. */
   withTransaction<T>(fn: () => Promise<T>): Promise<T>;

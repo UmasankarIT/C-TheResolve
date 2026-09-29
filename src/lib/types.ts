@@ -196,3 +196,123 @@ export interface SubmissionResponse {
   mlAnalysis: MLAnalysis;
   message: string;
 }
+
+/**
+ * Finest-to-coarsest administrative granularity a complaint's location
+ * resolved to. The clustering stage buckets on the finest level that is
+ * actually known, so a report with a ward never merges with one that only
+ * knows its district.
+ */
+export type LocationGranularity = 'ward' | 'district' | 'state' | 'unknown';
+
+/** Which subsystem produced a field: Gemini, or the deterministic fallback. */
+export type PipelineEngine = 'gemini' | 'heuristic' | 'unavailable';
+
+/**
+ * One citizen's account of a civic problem, with the structured fields the
+ * demand-signal pipeline buckets on. Distinct from `Issue`: an issue is an
+ * aggregated incident at a physical point, a complaint is a single account.
+ */
+export interface Complaint {
+  id: string;
+  sourceIssueId?: string;
+  sourceReportId?: string;
+  /** What kind of problem this is. Stage 1 never merges across two of these. */
+  issueType: string;
+  locationState?: string;
+  locationDistrict?: string;
+  locationWard?: string;
+  /** Human-readable bucket label, e.g. "Visakhapatnam, Andhra Pradesh — Ward 12". */
+  location: string;
+  locationGranularity: LocationGranularity;
+  urgencyScore: number;
+  urgencyReason?: string;
+  originalLanguage: string;
+  originalText: string;
+  /** Faithful English rendering. This is what gets embedded. */
+  translatedText: string;
+  /** pgvector column, held in memory as a plain number array. */
+  embedding?: number[];
+  embeddingModel?: string;
+  embeddingDimensions?: number;
+  extractionEngine: PipelineEngine;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** The clustered output: many complaints describing one underlying problem. */
+export interface DemandSignal {
+  clusterId: string;
+  issueType: string;
+  location: string;
+  locationState?: string;
+  locationDistrict?: string;
+  locationWard?: string;
+  memberComplaintIds: string[];
+  volume: number;
+  avgUrgency: number;
+  summary: string;
+  languagesRepresented: string[];
+  similarityThreshold: number;
+  verificationEngine: PipelineEngine;
+  /**
+   * Step 4 data fusion. Population and infrastructure gap for the signal's
+   * district, joined from the district reference table. These default to null
+   * (never undefined) once a signal passes through the fusion step: a missing
+   * value is a fact about the open data, not an optional geo field, and the
+   * Step 5 scorer must be able to tell "no data" apart from "data is zero".
+   */
+  populationAffected?: number | null;
+  existingInfrastructureGap?: number | null;
+  dataFusionSource?: string | null;
+  /**
+   * Step 5 priority scoring. Computed by `scoreDemandSignals` over the full
+   * set of clusters and attached at serialisation time; absent on signals that
+   * have not been scored. The effective weights after dropping missing
+   * components are recorded in `priorityBreakdown` so the score can always be
+   * re-derived by hand from the numbers on the row.
+   */
+  priorityScore?: number;
+  priorityExplanation?: string;
+  priorityBreakdown?: PriorityBreakdown;
+  dataUnavailable?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** The effective weight applied to each component of the Step 5 formula. */
+export interface PriorityWeights {
+  /** 0 when the volume term had to be dropped (never in practice). */
+  volume: number;
+  /** 0 when the urgency term had to be dropped (never in practice). */
+  avgUrgency: number;
+  /** 0 when this district has no infrastructure gap data. */
+  infrastructureGap: number;
+  /** 0 when this district has no population data. */
+  populationAffected: number;
+}
+
+/**
+ * The component values that produced `priorityScore`, so the score is
+ * re-computable by hand and missing components are visible as explicit nulls
+ * rather than silent zeros.
+ */
+export interface PriorityBreakdown {
+  /** Min-max scaled across the current cluster set (0-1). */
+  normalizedVolume: number;
+  /** Urgency 1-5 mapped to 0-1 via (x - 1) / 4. */
+  normalizedAvgUrgency: number;
+  /** Gap percentage (0-100) mapped to 0-1; null when the district has no data. */
+  infrastructureGapScore: number | null;
+  /** Min-max scaled across the current cluster set (0-1); null when no data. */
+  normalizedPopulationAffected: number | null;
+  /** The weights actually used, renormalised to sum to 1 over present terms. */
+  weights: PriorityWeights;
+}
+
+/** Per-complaint verdict from the stage 4 verification pass. */
+export interface ClusterVerdict {
+  sameIssue: boolean;
+  summary: string;
+  engine: PipelineEngine;
+}
