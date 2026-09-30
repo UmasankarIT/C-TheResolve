@@ -162,7 +162,6 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
         ref={fileInputRef}
         onChange={handleFileChange}
         accept="image/*"
-        capture="environment"
         className="hidden"
       />
 

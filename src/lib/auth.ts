@@ -8,7 +8,7 @@ export const SESSION_COOKIE = 'civres_session';
 // (already excluded from the repo via .gitignore). The fallback keeps local
 // dev + the offline demo running with zero setup.
 const SECRET = new TextEncoder().encode(
-  process.env.CIVRES_JWT_SECRET || 'civicresolve-dgp-demo-secret-change-in-prod'
+  process.env.CIVRES_JWT_SECRET || 'civicresolve-demo-secret-change-in-prod'
 );
 
 if (process.env.NODE_ENV === 'production' && !process.env.CIVRES_JWT_SECRET) {

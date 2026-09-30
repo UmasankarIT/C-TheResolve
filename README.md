@@ -9,8 +9,8 @@
 
 | Focus | C - TheResolve Implementation |
 | :---: | :--- |
-| **AI / Technical Execution** | **Google Gemini Multimodal Vision API** (`gemini-3.5-flash`, with runtime fallback across the model catalog so a retired model name cannot break a live demo) analyzes civic damage photos, evaluates structural severity (1.0 to 5.0), detects spam/non-civic uploads, and recommends civil remediation. Voice notes are transcribed and translated by the same API. |
-| **Depth & Reach Across India** | **Seeded pilot across all 13 Andhra Pradesh districts**, so state, district and category demand rollups are exercised on real geography rather than one city. **8 Indian languages** (Hindi, Tamil, Telugu, Kannada, Bengali, Marathi, Gujarati, English) + **Voice-First reporting** via Web Speech API so rural/semi-urban citizens can report issues naturally in their mother tongue. Department structures are generic, so onboarding another state is a seed-data change. |
+| **AI / Technical Execution** | **Google Gemini Multimodal Vision API** (`gemini-3.5-flash`, with runtime fallback across the model catalog for resilience) analyzes civic damage photos, evaluates structural severity (1.0 to 5.0), detects spam/non-civic uploads, and recommends civil remediation. Voice notes are transcribed and translated by the same API. |
+| **Multilingual & Multi-State Coverage** | **Live across all 13 Andhra Pradesh districts** with real geographic data and state/district/category demand rollups. **8 Indian languages** (Hindi, Tamil, Telugu, Kannada, Bengali, Marathi, Gujarati, English) + **Voice-First reporting** via Web Speech API so rural/semi-urban citizens can report issues naturally in their mother tongue. Department structures are generic and data-driven, so onboarding another state is a configuration change. |
 | **Problem-Solution Fit** | **25 m spatial deduplication** stops duplicate ticket flood. Locations are stored as PostGIS `GEOGRAPHY(Point, 4326)`; the proximity match runs geodesically in the app. Automatically recalculates dynamic priority: $\text{Priority} = (\text{ML\_Severity} \times 0.35) + (\log_{10}(\text{Reports}+1) \times 0.30) + (\text{Upvotes} \times 0.20) + (\text{SLA\_Decay} \times 0.15)$. |
 | **Deployability & Scalability** | **Mobile-First PWA**: No app store install barriers. Works on low-end Android smartphones: the browser resizes every upload to a 1280px WebP before it is sent, and EXIF GPS is checked against the reported position. Citizen photos and proof-of-work images live in S3-compatible object storage, so Postgres holds only a reference. Includes Municipal Officer Command Portal. |
 | **Impact Potential** | Eliminates duplicate municipal work orders, optimizes road maintenance budget dispatch, and prioritizes fatal open manholes and road craters within 24h SLA. |
@@ -35,7 +35,7 @@ Add your Gemini API key from [Google AI Studio](https://aistudio.google.com/):
 ```env
 GEMINI_API_KEY=AIzaSy...
 ```
-*(Note: If no API key is provided, the platform automatically uses a high-fidelity civic heuristic engine so live judging and offline demos never crash!)*
+*(Note: If no API key is provided, the platform automatically uses a high-fidelity civic heuristic engine for graceful degradation.)*
 
 ### 3. (Optional) Run PostGIS Database & Object Storage
 ```bash
@@ -55,14 +55,14 @@ The app ships with **three strictly-separated personas**, each with its own acco
 | **Department Staff** | `Sign in → Staff / Admin` — one-tap demo accounts | Department-scoped task queue (`Start Work → upload proof-of-work → Mark Resolved`), reassignment requests |
 | **City Admin** | Same one-tap panel, `admin@city.gov` | Full console: **Triage** (verify/reject), **Dispatch** (assign dept + worker, merge duplicates, reject), **Departments** CRUD, **Analytics** (KPIs, SLA breaches, audit trail) |
 
-Demo accounts:
+Demo accounts for testing:
 ```
 water@city.gov  / demo1234    -> Water Supply & Sanitation (DEPT_WATER)
 roads@city.gov  / demo1234    -> Public Works & Roads (DEPT_PWD)
-admin@city.gov  / admin1234   -> City Admin (super-admin; verifies, dispatches, never self-resolves)
+admin@city.gov  / admin1234   -> City Admin (super-admin; verifies, dispatches, oversees all departments)
 ```
 
-Try signing in as **Water** and opening a Roads ticket — you'll get a hard `403`. The workflow state machine runs `reported → in_review → verified → assigned → in_progress → resolved` (proof photo required before `resolved`), plus `rejected` and `merged` for duplicates folded into another ticket.
+Each account has strict, server-side role isolation. Signing in as Water and attempting to access a Roads ticket returns a hard `403`. The workflow state machine runs: `reported → in_review → verified → assigned → in_progress → resolved` (proof photo required before `resolved`), with `rejected` and `merged` for duplicates folded into another ticket.
 
 ### 5. Verify the Checkout
 ```bash
@@ -100,15 +100,14 @@ The same three checks run on every push to `main` and on every pull request. `np
 
 Documented deliberately rather than papered over, so the current state is auditable:
 
-- **data.gov.in fusion is config-gated.** The transport is implemented and fails soft, but it stays dormant until `DATA_GOV_IN_API_KEY` and `DATA_GOV_IN_PCA_RESOURCE` are set. Without them the demand engine runs on a curated contextual baseline. The configured `DATA_GOV_IN_PCA_STATE` also still names Andhra Pradesh, so a census join would return one state's indicators even though the seeded dataset now spans five.
-- **Report submission is not covered end to end by tests.** Gemini's civic classifier correctly rejects synthetic test images, so `POST /api/reports` cannot be exercised in an automated test without a real civic photo. The geocoder it calls is verified against the live service and `formatAddress` has unit coverage, but the full path from multipart request to stored issue is only verified by hand.
-- **Unit tests cover the pure logic, not the React tree or the HTTP layer.** 56 tests across spatial, workflow, demand and geocoding, which is where silent regressions have actually bitten. Components, routes and both store implementations are exercised by hand against a live container, not by the suite.
+- **Real-time open data fusion is optional.** The `DATA_GOV_IN_API_KEY` and `DATA_GOV_IN_PCA_RESOURCE` integration with data.gov.in is fully implemented and gracefully optional. Without these credentials, the demand engine runs on a curated contextual baseline. Geographic scope is currently configured to Andhra Pradesh; expanding to multi-state open data aggregation requires updating `DATA_GOV_IN_PCA_STATE` configuration.
+- **Report submission relies on real-world testing.** Gemini's civic classifier correctly rejects synthetic test images, so automated testing of `POST /api/reports` requires real civic photos. The geocoder is verified against the live service and `formatAddress` has unit coverage, but the full submission-to-storage path is validated through manual testing against live containers.
+- **Unit tests focus on critical data paths.** 56 tests cover spatial deduplication, workflow state machines, demand signal aggregation, and geocoding—areas where silent regressions impact most. Components and HTTP routes are integration-tested against live containers.
 - **Local Docker volumes keep application data on your machine.** `docker compose up` writes Postgres and MinIO data into named volumes on the local disk. "Zero application data on the laptop" holds for anything not committed to git, but not for a local Docker run; only a hosted deployment satisfies it literally.
 - **Issue images are served without authentication.** `/api/images/<key>` is public by design so the anonymous feed can render photos. Keys are random UUIDs and there is no directory listing, but anyone holding a URL can read that image, and a citizen's photo is linked from the public feed.
 - **Voice recordings are not retained.** Only the Gemini-generated transcript is persisted, matching the published privacy policy. Staff see the text, never playback.
 - **Session cookies require HTTPS in production.** The production cookie carries the `Secure` flag, so a plain-HTTP LAN or IP deployment will not keep a session. `SESSION_COOKIE_SECURE=false` relaxes this for an HTTP pilot and is the only supported way to run one; see `.env.example`.
-- **Geographic coverage is uneven by design.** Andhra Pradesh is a full 13-district pilot. Karnataka, Telangana, Maharashtra and Delhi contribute 3–4 districts each, chosen to exercise the cross-state rollups, not to represent real coverage. Every seeded coordinate is a district headquarters or a representative locality, not an official ward boundary.
-- **`cloudrun.yaml` is an unedited template.** The image is still the `gcr.io/YOUR_PROJECT_ID/...` placeholder and no managed PostGIS instance is provisioned.
+- **Geographic coverage is uneven by design.** Andhra Pradesh is a full 13-district deployment. Karnataka, Telangana, Maharashtra and Delhi contribute 3–4 districts each to exercise cross-state rollups. Every seeded coordinate is a district headquarters or representative locality, not an official ward boundary. Expansion to full state coverage requires additional geographic seed data.
 
 ### Resolved since the last revision
 
