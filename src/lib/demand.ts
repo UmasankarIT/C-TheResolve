@@ -544,7 +544,7 @@ export function buildPromptContext(
   }
 
   return `
-You are the Demand Intelligence advisor for CivicResolve, an Indian civic infrastructure platform that aggregates citizen grievances. Based ONLY on the data below, recommend 3-6 high-priority public projects for municipal policymakers with concise technical and community rationale.
+You are the Demand Intelligence advisor for C - TheResolve, an Indian civic infrastructure platform that aggregates citizen grievances. Based ONLY on the data below, recommend 3-6 high-priority public projects for municipal policymakers with concise technical and community rationale.
 
 DATA
 Total open work orders: ${issues.length}

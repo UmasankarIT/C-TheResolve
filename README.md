@@ -1,19 +1,19 @@
-# CivicResolve (सिविक रिज़ॉल्व) 🇮🇳
+﻿# C - TheResolve 🇮🇳
 ### AI-Powered Community Infrastructure Intelligence & Rapid Municipal Redressal
 
-Built for the **Google AI Challenge / Hackathon**, **CivicResolve** is a production-grade, responsive Progressive Web Application (PWA) that empowers citizens across India to report localized civic infrastructure failures (potholes, open manholes, sewage overflow, garbage dumps, dark streetlights, and burst water pipes).
+**C - TheResolve** is a production-grade, responsive Progressive Web Application (PWA) that empowers citizens across India to report localized civic infrastructure failures (potholes, open manholes, sewage overflow, garbage dumps, dark streetlights, and burst water pipes).
 
 ---
 
-## 🏆 Hackathon Evaluation Criteria Alignment (100%)
+## ✅ Feature Highlights
 
-| Weight | Criteria | CivicResolve Implementation |
-| :---: | :--- | :--- |
-| **25%** | **AI / Technical Execution** | **Google Gemini Multimodal Vision API** (`gemini-3.5-flash`, with runtime fallback across the model catalog so a retired model name cannot break a live demo) analyzes civic damage photos, evaluates structural severity (1.0 to 5.0), detects spam/non-civic uploads, and recommends civil remediation. Voice notes are transcribed and translated by the same API. |
-| **20%** | **Depth & Reach Across India** | **Seeded pilot across all 13 Andhra Pradesh districts**, so state, district and category demand rollups are exercised on real geography rather than one city. **8 Indian languages** (Hindi, Tamil, Telugu, Kannada, Bengali, Marathi, Gujarati, English) + **Voice-First reporting** via Web Speech API so rural/semi-urban citizens can report issues naturally in their mother tongue. Department structures are generic, so onboarding another state is a seed-data change. |
-| **20%** | **Problem-Solution Fit** | **25 m spatial deduplication** stops duplicate ticket flood. Locations are stored as PostGIS `GEOGRAPHY(Point, 4326)`; the proximity match runs geodesically in the app. Automatically recalculates dynamic priority: $\text{Priority} = (\text{ML\_Severity} \times 0.35) + (\log_{10}(\text{Reports}+1) \times 0.30) + (\text{Upvotes} \times 0.20) + (\text{SLA\_Decay} \times 0.15)$. |
-| **20%** | **Deployability & Scalability** | **Mobile-First PWA**: No app store install barriers. Works on low-end Android smartphones: the browser resizes every upload to a 1280px WebP before it is sent, and EXIF GPS is checked against the reported position. Citizen photos and proof-of-work images live in S3-compatible object storage, so Postgres holds only a reference. Includes Municipal Officer Command Portal. |
-| **15%** | **Impact Potential** | Eliminates duplicate municipal work orders, optimizes road maintenance budget dispatch, and prioritizes fatal open manholes and road craters within 24h SLA. |
+| Focus | C - TheResolve Implementation |
+| :---: | :--- |
+| **AI / Technical Execution** | **Google Gemini Multimodal Vision API** (`gemini-3.5-flash`, with runtime fallback across the model catalog so a retired model name cannot break a live demo) analyzes civic damage photos, evaluates structural severity (1.0 to 5.0), detects spam/non-civic uploads, and recommends civil remediation. Voice notes are transcribed and translated by the same API. |
+| **Depth & Reach Across India** | **Seeded pilot across all 13 Andhra Pradesh districts**, so state, district and category demand rollups are exercised on real geography rather than one city. **8 Indian languages** (Hindi, Tamil, Telugu, Kannada, Bengali, Marathi, Gujarati, English) + **Voice-First reporting** via Web Speech API so rural/semi-urban citizens can report issues naturally in their mother tongue. Department structures are generic, so onboarding another state is a seed-data change. |
+| **Problem-Solution Fit** | **25 m spatial deduplication** stops duplicate ticket flood. Locations are stored as PostGIS `GEOGRAPHY(Point, 4326)`; the proximity match runs geodesically in the app. Automatically recalculates dynamic priority: $\text{Priority} = (\text{ML\_Severity} \times 0.35) + (\log_{10}(\text{Reports}+1) \times 0.30) + (\text{Upvotes} \times 0.20) + (\text{SLA\_Decay} \times 0.15)$. |
+| **Deployability & Scalability** | **Mobile-First PWA**: No app store install barriers. Works on low-end Android smartphones: the browser resizes every upload to a 1280px WebP before it is sent, and EXIF GPS is checked against the reported position. Citizen photos and proof-of-work images live in S3-compatible object storage, so Postgres holds only a reference. Includes Municipal Officer Command Portal. |
+| **Impact Potential** | Eliminates duplicate municipal work orders, optimizes road maintenance budget dispatch, and prioritizes fatal open manholes and road craters within 24h SLA. |
 
 ---
 

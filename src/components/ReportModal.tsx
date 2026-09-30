@@ -655,7 +655,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                 className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0"
               />
               <span className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                I consent to CivicResolve storing my report, location, photo and voice note for resolving this
+                I consent to C - TheResolve storing my report, location, photo and voice note for resolving this
                 grievance, and to processing them with Google Gemini to classify the issue. Aggregated views are
                 anonymous. See <span className="font-semibold">PRIVACY.md</span>.
               </span>

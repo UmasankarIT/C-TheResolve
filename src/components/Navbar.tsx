@@ -104,7 +104,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-lg sm:text-xl tracking-tight text-slate-900 dark:text-white">
-                  CivicResolve
+                  C - TheResolve
                 </span>
                 <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                   RBAC · 3-Tier

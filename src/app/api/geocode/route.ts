@@ -12,7 +12,7 @@ async function searchNominatim(q: string): Promise<GeocodeHit[]> {
     `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&limit=8&addressdetails=1&accept-language=en`,
     {
       headers: {
-        'User-Agent': 'CivicResolve-DPG/1.0 (hackathon digital public good; offline demo)',
+        'User-Agent': 'C - TheResolve-DPG/1.0 (civic digital public good)',
         'Accept-Language': 'en',
       },
       cache: 'force-cache',
@@ -50,7 +50,7 @@ async function searchNominatim(q: string): Promise<GeocodeHit[]> {
 async function searchPhoton(q: string): Promise<GeocodeHit[]> {
   const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`, {
     headers: {
-      'User-Agent': 'CivicResolve-DPG/1.0 (hackathon digital public good; offline demo)',
+      'User-Agent': 'C - TheResolve-DPG/1.0 (civic digital public good)',
     },
     cache: 'force-cache',
     next: { revalidate: 3600 },

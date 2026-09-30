@@ -1,6 +1,6 @@
-# Privacy & Data Protection — CivicResolve
+# Privacy & Data Protection — C - TheResolve
 
-CivicResolve is a Digital Public Good. It handles information that can identify
+C - TheResolve is a Digital Public Good. It handles information that can identify
 a specific person and the exact spot of a civic problem, so this page documents
 what is collected, why, and who can see it.
 
@@ -42,7 +42,7 @@ what is collected, why, and who can see it.
 
 ## Consent
 
-Filing a report through CivicResolve constitutes consent to the processing
+Filing a report through C - TheResolve constitutes consent to the processing
 described above for the purpose of resolving the grievance. Consent can be
 withdrawn at any time by contacting the department that received the report,
 which will delete or anonymise the record on request.
@@ -61,7 +61,7 @@ Data protection queries: `privacy@civicresolve.in`
 
 ## Deployment note for agencies
 
-Any body deploying CivicResolve inherits responsibility for this data. Before
+Any body deploying C - TheResolve inherits responsibility for this data. Before
 production use, replace the contact above, state the retention period that
 applies to your body, and confirm your department's own privacy notice covers
 the citizen reports it receives through this platform.

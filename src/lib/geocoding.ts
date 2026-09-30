@@ -75,7 +75,7 @@ export async function reverseGeocode(lat: number, lon: number): Promise<ReverseG
     {
       headers: {
         // Nominatim's usage policy requires an identifying User-Agent.
-        'User-Agent': 'CivicResolve-DPG/1.0 (hackathon digital public good; offline demo)',
+        'User-Agent': 'C - TheResolve-DPG/1.0 (civic digital public good)',
         'Accept-Language': 'en',
       },
       cache: 'force-cache',

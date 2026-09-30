@@ -20,7 +20,7 @@ export const SUPPORTED_LANGUAGES: LanguageMeta[] = [
 
 export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
   en: {
-    appTitle: 'CivicResolve',
+    appTitle: 'C - TheResolve',
     tagline: 'AI-Powered Community Infrastructure Intelligence',
     citizenMode: 'Citizen Portal',
     officerMode: 'Municipal Admin Portal',
@@ -87,7 +87,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     remotePinNote: 'Pin placed at the searched location — reporting remotely.',
   },
   hi: {
-    appTitle: 'सिविक रिज़ॉल्व',
+    appTitle: 'C - TheResolve',
     tagline: 'एआई-संचालित सामुदायिक बुनियादी ढांचा समाधान',
     citizenMode: 'नागरिक पोर्टल',
     officerMode: 'नगर निगम अधिकारी पोर्टल',
@@ -154,7 +154,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     remotePinNote: 'पिन खोजे गए स्थान पर लगाया गया — दूर से रिपोर्ट हो रही है।',
   },
   ta: {
-    appTitle: 'சிவிக் ரிசால்வ்',
+    appTitle: 'C - TheResolve',
     tagline: 'செயற்கை நுண்ணறிவு அடிப்படையிலான மக்கள் கட்டமைப்பு தளம்',
     citizenMode: 'குடிமக்கள் போர்டல்',
     officerMode: 'மாநகராட்சி நிர்வாக போர்டல்',
@@ -221,7 +221,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     remotePinNote: 'தேடிய இடத்தில் பின் வைக்கப்பட்டது — தொலைவிலிருந்து பதிவு செய்கிறது.',
   },
   te: {
-    appTitle: 'సివిక్ రిజాల్వ్',
+    appTitle: 'C - TheResolve',
     tagline: 'ఏఐ ఆధారిత పౌర సమస్యల పరిష్కార వేదిక',
     citizenMode: 'పౌరుల పోర్టల్',
     officerMode: 'మున్సిపల్ అధికారి పోర్టల్',
@@ -288,7 +288,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     remotePinNote: 'శోధించిన ప్రదేశంలో పిన్ ఉంచబడింది — సుదూరం నుండి నివేదిస్తోంది.',
   },
   kn: {
-    appTitle: 'ಸಿವಿಕ್ ರಿಸಾಲ್ವ್',
+    appTitle: 'C - TheResolve',
     tagline: 'ಎಐ ಆಧಾರಿತ ಸಮುದಾಯ ಮೂಲಸೌಕರ್ಯ ಪರಿಹಾರ ವೇದಿಕೆ',
     citizenMode: 'ನಾಗರಿಕ ಪೋರ್ಟಲ್',
     officerMode: 'ಪಾಲಿಕೆ ಅಧಿಕಾರಿ ಪೋರ್ಟಲ್',
@@ -355,7 +355,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     remotePinNote: 'ಹುಡುಕಿದ ಸ್ಥಳದಲ್ಲಿ ಪಿನ್ ಇರಿಸಲಾಗಿದೆ — ದೂರದಿಂದ ವರದಿ ಮಾಡುತ್ತಿದೆ.',
   },
   bn: {
-    appTitle: 'সিভিক রিজলভ',
+    appTitle: 'C - TheResolve',
     tagline: 'এআই-চালিত নাগরিক পরিকাঠামো প্ল্যাটফর্ম',
     citizenMode: 'নাগরিক পোর্টাল',
     officerMode: 'পৌরসভা অ্যাডমিন পোর্টাল',
@@ -422,7 +422,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     remotePinNote: 'অনুসন্ধানকৃত স্থানে পিন বসানো হয়েছে — দূর থেকে রিপোর্ট করা হচ্ছে।',
   },
   mr: {
-    appTitle: 'सिव्हिक रिझॉल्व्ह',
+    appTitle: 'C - TheResolve',
     tagline: 'एआय-आधारित नागरी पायाभूत सुविधा निराकरण प्रणाली',
     citizenMode: 'नागरिक पोर्टल',
     officerMode: 'महानगरपालिका अधिकारी पोर्टल',
@@ -489,7 +489,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     remotePinNote: 'शोधलेल्या ठिकाणी पिन ठेवला आहे — दूरून नोंदवत आहे.',
   },
   gu: {
-    appTitle: 'સિવિક રિઝોલ્વ',
+    appTitle: 'C - TheResolve',
     tagline: 'એઆઈ સંચાલિત નાગરિક સુવિધા પ્લેટફોર્મ',
     citizenMode: 'નાગરિક પોર્ટલ',
     officerMode: 'પાલિકા એડમિન પોર્ટલ',

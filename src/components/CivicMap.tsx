@@ -122,7 +122,7 @@ export const CivicMap: React.FC<CivicMapProps> = ({
         });
 
         const tileLayer = L.tileLayer(TILE_URL, {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | CivicResolve',
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | C - TheResolve',
           maxZoom: 19,
         }).addTo(map);
 

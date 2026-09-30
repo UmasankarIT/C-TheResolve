@@ -1,5 +1,5 @@
 /**
- * CivicResolve Prioritization Scoring Engine
+ * C - TheResolve Prioritization Scoring Engine
  * Computes dynamic urgency rank based on multi-factor weighted inputs:
  * 
  * Priority = (ML_Severity * 0.35) + (log10(Report_Count + 1) * 0.30) 

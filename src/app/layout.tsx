@@ -5,13 +5,13 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'CivicResolve | Next-Gen Community Issue Reporting Platform',
+  title: 'C - TheResolve | Next-Gen Community Issue Reporting Platform',
   description: 'Production-grade community infrastructure reporting with real-time GPS verification, PostGIS spatial deduplication, and dynamic priority scoring.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'CivicResolve',
+    title: 'C - TheResolve',
   },
 };
 

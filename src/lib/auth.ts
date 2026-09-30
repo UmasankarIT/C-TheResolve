@@ -6,7 +6,7 @@ export const SESSION_COOKIE = 'civres_session';
 
 // Demo-grade secret. For a real deployment supply CIVRES_JWT_SECRET in env
 // (already excluded from the repo via .gitignore). The fallback keeps local
-// dev + the hackathon demo running with zero setup.
+// dev + the offline demo running with zero setup.
 const SECRET = new TextEncoder().encode(
   process.env.CIVRES_JWT_SECRET || 'civicresolve-dgp-demo-secret-change-in-prod'
 );

@@ -15,7 +15,7 @@ export interface SeedCity {
 
 // Deep-coverage pilot: one entry per district for all 13 Andhra Pradesh
 // districts, anchored on the district headquarters. This is the unit a state
-// government would actually pilot CivicResolve in — a whole state, not a
+// government would actually pilot C - TheResolve in — a whole state, not a
 // sample. Coordinates are HQ points and `wardName` is a representative
 // locality, not the official AP ward/delimitation list.
 //
@@ -215,7 +215,7 @@ function placeholderImage(label: string, tint: string): string {
     `<rect width="320" height="240" fill="${tint}"/>` +
     `<rect x="8" y="8" width="304" height="224" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="2"/>` +
     `<text x="160" y="118" font-family="Segoe UI,Arial,sans-serif" font-size="22" fill="#ffffff" text-anchor="middle">${label}</text>` +
-    `<text x="160" y="150" font-family="Segoe UI,Arial,sans-serif" font-size="13" fill="#ffffff" fill-opacity="0.72" text-anchor="middle">CivicResolve sample grievance</text>` +
+    `<text x="160" y="150" font-family="Segoe UI,Arial,sans-serif" font-size="13" fill="#ffffff" fill-opacity="0.72" text-anchor="middle">C - TheResolve sample grievance</text>` +
     `</svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }

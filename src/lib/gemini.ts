@@ -205,7 +205,7 @@ async function runGeminiVision(
   const base64Data = matches ? matches[2] : base64DataWithPrefix;
 
   const prompt = `
-You are an expert municipal civil engineer and civic infrastructure auditor working on CivicResolve, an Indian civic infrastructure grievance platform.
+You are an expert municipal civil engineer and civic infrastructure auditor working on C - TheResolve, an Indian civic infrastructure grievance platform.
 Analyze this civic issue photo submitted by a citizen.
 
 Context / Citizen description: "${userComment || 'No additional comment'}"
@@ -318,7 +318,7 @@ export async function transcribeVoiceNote(
   const audioData = matches[2];
   if (audioData.length > 12_000_000) return empty;
 
-  const prompt = `You are the voice intake service for CivicResolve, an Indian civic infrastructure grievance platform. A citizen recorded an audio complaint about a civic issue (pothole, drainage/sewage, garbage, streetlight, water pipeline burst, or other).
+  const prompt = `You are the voice intake service for C - TheResolve, an Indian civic infrastructure grievance platform. A citizen recorded an audio complaint about a civic issue (pothole, drainage/sewage, garbage, streetlight, water pipeline burst, or other).
 
 The citizen's selected language is: ${languageHint || 'unknown'}.
 
@@ -502,7 +502,7 @@ export async function extractComplaintFields(
   const apiKey = geminiApiKey();
   if (!apiKey) return null;
 
-  const prompt = `You are the intake normalisation service for CivicResolve, an Indian civic infrastructure grievance platform. Turn one citizen's complaint into a structured record.
+  const prompt = `You are the intake normalisation service for C - TheResolve, an Indian civic infrastructure grievance platform. Turn one citizen's complaint into a structured record.
 
 Citizen's own words: "${input.rawText || '(none typed)'}"
 
