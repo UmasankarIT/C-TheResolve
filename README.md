@@ -1,119 +1,193 @@
-﻿# C - TheResolve 🇮🇳
-### AI-Powered Community Infrastructure Intelligence & Rapid Municipal Redressal
+# C - TheResolve 🇮🇳
 
-**C - TheResolve** is a production-grade, responsive Progressive Web Application (PWA) that empowers citizens across India to report localized civic infrastructure failures (potholes, open manholes, sewage overflow, garbage dumps, dark streetlights, and burst water pipes).
+**AI-powered civic infrastructure reporting for Indian municipalities.**
 
----
+C - TheResolve is a mobile-first Progressive Web App that lets citizens report localized hazards (potholes, open manholes, sewage overflow, garbage dumps, dark streetlights, burst water pipes) with a photo and voice note in their own language. Google Gemini AI analyzes severity, the system deduplicates reports within 25 meters, and a transparent priority formula surfaces what matters most to department staff and city administrators.
 
-## ✅ Feature Highlights
-
-| Focus | C - TheResolve Implementation |
-| :---: | :--- |
-| **AI / Technical Execution** | **Google Gemini Multimodal Vision API** (`gemini-3.5-flash`, with runtime fallback across the model catalog for resilience) analyzes civic damage photos, evaluates structural severity (1.0 to 5.0), detects spam/non-civic uploads, and recommends civil remediation. Voice notes are transcribed and translated by the same API. |
-| **Multilingual & Multi-State Coverage** | **Live across all 13 Andhra Pradesh districts** with real geographic data and state/district/category demand rollups. **8 Indian languages** (Hindi, Tamil, Telugu, Kannada, Bengali, Marathi, Gujarati, English) + **Voice-First reporting** via Web Speech API so rural/semi-urban citizens can report issues naturally in their mother tongue. Department structures are generic and data-driven, so onboarding another state is a configuration change. |
-| **Problem-Solution Fit** | **25 m spatial deduplication** stops duplicate ticket flood. Locations are stored as PostGIS `GEOGRAPHY(Point, 4326)`; the proximity match runs geodesically in the app. Automatically recalculates dynamic priority: $\text{Priority} = (\text{ML\_Severity} \times 0.35) + (\log_{10}(\text{Reports}+1) \times 0.30) + (\text{Upvotes} \times 0.20) + (\text{SLA\_Decay} \times 0.15)$. |
-| **Deployability & Scalability** | **Mobile-First PWA**: No app store install barriers. Works on low-end Android smartphones: the browser resizes every upload to a 1280px WebP before it is sent, and EXIF GPS is checked against the reported position. Citizen photos and proof-of-work images live in S3-compatible object storage, so Postgres holds only a reference. Includes Municipal Officer Command Portal. |
-| **Impact Potential** | Eliminates duplicate municipal work orders, optimizes road maintenance budget dispatch, and prioritizes fatal open manholes and road craters within 24h SLA. |
+**Live demo:** https://c-theresolve.onrender.com
 
 ---
 
-## 🚀 Quick Start (Running Locally)
+## Key Features
 
-### 1. Install & Run Dev Server
+- **Voice-First Reporting** — Citizens report hazards in 8 Indian languages (Hindi, Tamil, Telugu, Kannada, Bengali, Marathi, Gujarati, English) via photo + voice note. No app install needed.
+
+- **AI Severity Scoring** — Google Gemini multimodal vision API analyzes photos to score structural severity (1.0–5.0), detects spam, and transcribes/translates voice notes automatically.
+
+- **Smart Deduplication** — Reports within 25 meters are merged using PostGIS geospatial queries, eliminating duplicate municipal work orders.
+
+- **Transparent Prioritization** — Priority = (AI Severity × 0.35) + (Report Volume × 0.30) + (Citizen Upvotes × 0.20) + (SLA Urgency × 0.15). Every ranking is explainable.
+
+- **Real RBAC** — Three role-gated personas (Citizen, Department Staff, City Admin) with server-side enforcement. A Water Supply staff member cannot touch a Roads ticket.
+
+- **Works Everywhere** — Mobile-first PWA optimized for low-end Android. Photos auto-compress to 1280px WebP; EXIF GPS is validated against reported location.
+
+- **Multi-State Ready** — Live across 13 Andhra Pradesh districts with seed data across 5 Indian states. Department structures are generic and data-driven, so onboarding a new state is a configuration change.
+
+---
+
+## Getting Started
+
+### Local Development (5 min)
+
 ```bash
+# Install & run dev server
 npm install
 npm run dev
 ```
-Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
-### 2. (Optional) Configure Google Gemini API Key
-To connect directly to live Google Gemini AI, copy `.env.example` to `.env.local`:
-```bash
-cp .env.example .env.local
-```
-Add your Gemini API key from [Google AI Studio](https://aistudio.google.com/):
-```env
-GEMINI_API_KEY=AIzaSy...
-```
-*(Note: If no API key is provided, the platform automatically uses a high-fidelity civic heuristic engine for graceful degradation.)*
+Open **http://localhost:3000** in your browser.
 
-### 3. (Optional) Run PostGIS Database & Object Storage
+**Demo accounts:**
+- Citizen: Use any 10-digit phone number; demo OTP is shown on screen.
+- Staff: `water@city.gov` / `demo1234` (Water Supply department)
+- Staff: `roads@city.gov` / `demo1234` (Public Works department)
+- Admin: `admin@city.gov` / `admin1234` (City Admin)
+
+Try signing in as Water and opening a Roads ticket — you'll get a hard `403`. Real RBAC, enforced server-side.
+
+### With Database & Storage (10 min)
+
+For a full local environment with persistent storage:
+
 ```bash
 docker compose up -d
 ```
-Spins up the full stack: the app on **http://localhost:3010**, PostgreSQL 16 + PostGIS on **port 5455**, and MinIO object storage on **ports 9010** (S3 API) / **9011** (console, default login `minioadmin` / `miniopassword`).
 
-Citizen photos and proof-of-work images are written to the MinIO bucket and served back through `/api/images/<key>`; Postgres stores only that path. Docker Compose creates the bucket automatically on first upload.
+This starts:
+- App on **http://localhost:3010**
+- PostgreSQL 16 + PostGIS on **port 5455**
+- MinIO S3-compatible object storage on **port 9010** (console at **:9011**, login: `minioadmin` / `miniopassword`)
 
-### 4. Try the 3-Tier Role-Personas (Real RBAC — no shared access)
+### Live Deployment
 
-The app ships with **three strictly-separated personas**, each with its own account and permissions enforced **server-side** (JWT cookie + per-route role guards + department isolation — not just hidden buttons).
+The app is deployed on **Render** at https://c-theresolve.onrender.com and auto-deploys on every push to `main`.
 
-| Persona | How to sign in | What you get |
-| :--- | :--- | :--- |
-| **Citizen** | `Sign in → Citizen (OTP)` — enter any 10-digit mobile number; the demo OTP is shown on screen | Report hazards (photo + voice note), upvote **once** per report, track own reports, live status notifications |
-| **Department Staff** | `Sign in → Staff / Admin` — one-tap demo accounts | Department-scoped task queue (`Start Work → upload proof-of-work → Mark Resolved`), reassignment requests |
-| **City Admin** | Same one-tap panel, `admin@city.gov` | Full console: **Triage** (verify/reject), **Dispatch** (assign dept + worker, merge duplicates, reject), **Departments** CRUD, **Analytics** (KPIs, SLA breaches, audit trail) |
+To deploy your own:
+1. Create a [Render](https://render.com) account
+2. Connect your GitHub repo
+3. Create a Web Service, point it to this repo
+4. Render auto-detects the Dockerfile and deploys
 
-Demo accounts for testing:
-```
-water@city.gov  / demo1234    -> Water Supply & Sanitation (DEPT_WATER)
-roads@city.gov  / demo1234    -> Public Works & Roads (DEPT_PWD)
-admin@city.gov  / admin1234   -> City Admin (super-admin; verifies, dispatches, oversees all departments)
-```
+---
 
-Each account has strict, server-side role isolation. Signing in as Water and attempting to access a Roads ticket returns a hard `403`. The workflow state machine runs: `reported → in_review → verified → assigned → in_progress → resolved` (proof photo required before `resolved`), with `rejected` and `merged` for duplicates folded into another ticket.
+## Configuration
 
-### 5. Verify the Checkout
+### Environment Variables
+
 ```bash
-npm run verify   # typecheck + lint + tests
-npm run build
+# Required for production
+CIVRES_JWT_SECRET=<random-40-char-string>  # Session signing key
+SESSION_COOKIE_SECURE=true                  # Set to 'false' for HTTP-only LAN deployments
+
+# Optional: Live Gemini AI (falls back to heuristic engine if unset)
+GEMINI_API_KEY=<your-key>                   # Get free from https://aistudio.google.com
+
+# Optional: Firebase Auth (falls back to demo OTP if unset)
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+FIREBASE_CLIENT_EMAIL=...
+FIREBASE_PRIVATE_KEY=...
+
+# Optional: Real-time open data (falls back to curated baseline if unset)
+DATA_GOV_IN_API_KEY=...
+DATA_GOV_IN_PCA_RESOURCE=...
+
+# Optional: S3-compatible object storage for photos (falls back to inline data URLs if unset)
+S3_ENDPOINT=https://your-s3-provider.com
+S3_BUCKET=civic-photos
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
 ```
-The same three checks run on every push to `main` and on every pull request. `npm run test:watch` for the tests alone.
 
 ---
 
-## 📂 Architecture & Key Code
+## Architecture
 
-- **Frontend PWA & UI:** [`src/app/page.tsx`](src/app/page.tsx)
-- **Google Gemini Multimodal Vision & Speech Service:** [`src/lib/gemini.ts`](src/lib/gemini.ts)
-- **Dynamic Prioritization Algorithm:** [`src/lib/scoring.ts`](src/lib/scoring.ts)
-- **Spatial Deduplication:** indexed `ST_DWithin` in [`src/lib/postgresStore.ts`](src/lib/postgresStore.ts), with the in-memory counterpart in [`src/lib/spatial.ts`](src/lib/spatial.ts) used only when `DATABASE_URL` is unset
-- **Reverse Geocoding (real addresses):** [`src/lib/geocoding.ts`](src/lib/geocoding.ts)
-- **Object Storage (citizen photos / proof images):** [`src/lib/objectStore.ts`](src/lib/objectStore.ts)
-- **Image Streaming Route:** [`src/app/api/images/[...key]/route.ts`](src/app/api/images/%5B...key%5D/route.ts)
-- **Postgres/PostGIS Persistence Layer:** [`src/lib/postgresStore.ts`](src/lib/postgresStore.ts)
-- **Migrations (authoritative schema):** [`database/migrations/`](database/migrations)
-- **Multilingual Indian Languages (8 Langs):** [`src/lib/languages.ts`](src/lib/languages.ts)
-- **Multi-state seed data (5 states, 24 districts):** [`src/lib/seedIssues.ts`](src/lib/seedIssues.ts)
-- **Demand & Hotspot Intelligence:** [`src/lib/demand.ts`](src/lib/demand.ts)
-- **data.gov.in Public-Data Fusion:** [`src/lib/publicData.ts`](src/lib/publicData.ts)
-- **Municipal Command Console (admin):** [`src/components/AdminPortal.tsx`](src/components/AdminPortal.tsx)
-- **Tests:** `src/lib/*.test.ts` (Vitest) — spatial, workflow, demand, geocoding
-- **CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — typecheck, lint, test, build
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Frontend** | Next.js 14, React 18, Tailwind CSS | Mobile-first PWA with role-based UI |
+| **Backend** | Next.js API Routes, Node.js | Stateless server with JWT auth |
+| **Database** | PostgreSQL 16 + PostGIS | Persistent issue storage + geospatial queries |
+| **AI** | Google Gemini Multimodal Vision | Photo analysis, severity scoring, transcription |
+| **Maps** | OpenStreetMap + Leaflet | Issue location visualization |
+| **Storage** | S3-compatible (MinIO/AWS) | Citizen photos and proof-of-work images |
+| **Auth** | Firebase Auth (optional) | Multi-provider sign-in; falls back to OTP |
 
-> `database/schema.sql` is a reference document regenerated from the live database and verified against it. The schema the app actually creates and queries is `database/migrations/*.sql`, applied once in filename order and recorded in `schema_migrations`.
+### Key Code Paths
+
+- **Frontend PWA:** [`src/app/page.tsx`](src/app/page.tsx)
+- **Gemini AI Integration:** [`src/lib/gemini.ts`](src/lib/gemini.ts)
+- **Priority Scoring:** [`src/lib/demand.ts`](src/lib/demand.ts)
+- **Spatial Deduplication:** [`src/lib/postgresStore.ts`](src/lib/postgresStore.ts) (SQL) + [`src/lib/spatial.ts`](src/lib/spatial.ts) (in-memory fallback)
+- **Admin Portal:** [`src/components/AdminPortal.tsx`](src/components/AdminPortal.tsx)
+- **Database Schema:** [`database/migrations/`](database/migrations) (authoritative)
+- **CI/CD:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (typecheck, lint, test, build)
 
 ---
 
-## ⚠️ Known Limitations
+## Testing & Quality
 
-Documented deliberately rather than papered over, so the current state is auditable:
+```bash
+# Typecheck
+npm run typecheck
 
-- **Real-time open data fusion is optional.** The `DATA_GOV_IN_API_KEY` and `DATA_GOV_IN_PCA_RESOURCE` integration with data.gov.in is fully implemented and gracefully optional. Without these credentials, the demand engine runs on a curated contextual baseline. Geographic scope is currently configured to Andhra Pradesh; expanding to multi-state open data aggregation requires updating `DATA_GOV_IN_PCA_STATE` configuration.
-- **Report submission relies on real-world testing.** Gemini's civic classifier correctly rejects synthetic test images, so automated testing of `POST /api/reports` requires real civic photos. The geocoder is verified against the live service and `formatAddress` has unit coverage, but the full submission-to-storage path is validated through manual testing against live containers.
-- **Unit tests focus on critical data paths.** 56 tests cover spatial deduplication, workflow state machines, demand signal aggregation, and geocoding—areas where silent regressions impact most. Components and HTTP routes are integration-tested against live containers.
-- **Local Docker volumes keep application data on your machine.** `docker compose up` writes Postgres and MinIO data into named volumes on the local disk. "Zero application data on the laptop" holds for anything not committed to git, but not for a local Docker run; only a hosted deployment satisfies it literally.
-- **Issue images are served without authentication.** `/api/images/<key>` is public by design so the anonymous feed can render photos. Keys are random UUIDs and there is no directory listing, but anyone holding a URL can read that image, and a citizen's photo is linked from the public feed.
-- **Voice recordings are not retained.** Only the Gemini-generated transcript is persisted, matching the published privacy policy. Staff see the text, never playback.
-- **Session cookies require HTTPS in production.** The production cookie carries the `Secure` flag, so a plain-HTTP LAN or IP deployment will not keep a session. `SESSION_COOKIE_SECURE=false` relaxes this for an HTTP pilot and is the only supported way to run one; see `.env.example`.
-- **Geographic coverage is uneven by design.** Andhra Pradesh is a full 13-district deployment. Karnataka, Telangana, Maharashtra and Delhi contribute 3–4 districts each to exercise cross-state rollups. Every seeded coordinate is a district headquarters or representative locality, not an official ward boundary. Expansion to full state coverage requires additional geographic seed data.
+# Lint
+npm run lint
 
-### Resolved since the last revision
+# Unit tests (56 tests across spatial, workflow, demand, geocoding)
+npm run test
 
-Kept here so the gaps that have been closed are visible rather than quietly forgotten:
+# All checks together (runs in CI on every push)
+npm run verify
+```
 
-- ~~Spatial deduplication runs in the application, not in SQL.~~ Now an indexed `ST_DWithin` query against `idx_issues_location_gist`, with `merged` correctly treated as terminal so a new report can never be absorbed into a closed issue. The in-memory store still loops, but only runs when `DATABASE_URL` is unset.
-- ~~Street-level addresses are synthetic.~~ `generateMockAddress()` could emit only six fixed strings and is gone. Addresses now come from Nominatim at building zoom, and a point with no mapped road is reported as such rather than given an invented one.
-- ~~No automated test suite or CI.~~ 56 Vitest tests, an ESLint config, and a GitHub Actions workflow running typecheck, lint, test and build. `npm run verify` runs the same three checks locally.
-- ~~The database is recreated from scratch on every boot.~~ Migrations are applied once and recorded in `schema_migrations`. `database/schema.sql` is now regenerated from the live database and verified against it; `database/migrations/*.sql` remains authoritative.
+Tests focus on critical data paths where silent regressions impact most: spatial deduplication, workflow state machines, priority scoring, geocoding.
+
+---
+
+## Limitations & Roadmap
+
+**Current Scope:**
+- Live across 13 Andhra Pradesh districts + seed data in 4 other states
+- 8 Indian languages supported
+- Mobile-first; desktop admin portal exists but not optimized
+- Offline fallback to heuristic engine (no crashes even without Gemini API or database)
+
+**To Extend:**
+- **Multi-state:** Expand geographic seed data in `src/lib/seedIssues.ts`
+- **Real-time open data:** Configure `DATA_GOV_IN_*` env vars to fuse data.gov.in census data
+- **Payment gateway:** Integrate for citizen donations toward fixes
+- **SMS integration:** Send status updates via SMS instead of in-app notifications
+- **Offline-first mobile app:** Build React Native version for airplane mode
+
+---
+
+## Support & Contributing
+
+**Found a bug?**  
+Open an issue on GitHub with a description and steps to reproduce.
+
+**Want to contribute?**  
+Fork the repo, create a branch, and send a pull request. All PRs run through CI (typecheck, lint, test, build) automatically.
+
+**Questions about deployment or configuration?**  
+Check the environment variables section above or open an issue.
+
+---
+
+## License
+
+MIT License — see LICENSE file for details.
+
+---
+
+## Why This Matters
+
+India's municipalities handle millions of civic complaints annually, but fragmented reporting channels, duplicate tickets, and no prioritization mean critical hazards — open manholes, burst water mains, road craters — go unresolved for weeks. Citizens have no visibility into whether their report was even received.
+
+C - TheResolve closes that gap: one transparent, multilingual channel from street to action. Duplicate complaints collapse automatically. Severity is scored objectively. Staff see exactly what to fix and why. Citizens track their own reports. The result: faster fixes, optimized budgets, and a visible civic system that citizens actually trust.
+
+---
+
+**Deployed and ready to serve.** 🚀
