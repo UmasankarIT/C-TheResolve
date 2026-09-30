@@ -27,6 +27,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
   const [exifInfo, setExifInfo] = useState<ExifMetadata | null>(null);
   const [compressionRatio, setCompressionRatio] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const compressImage = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -164,6 +165,14 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
         accept="image/*"
         className="hidden"
       />
+      <input
+        type="file"
+        ref={cameraInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+      />
 
       {previewUrl ? (
         <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 aspect-video bg-slate-100 dark:bg-slate-950">
@@ -184,31 +193,47 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={compressing}
-          className="w-full h-40 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center p-5 text-center
-                     border-slate-300 hover:border-emerald-500 bg-white hover:bg-slate-50 text-slate-700
-                     dark:border-slate-800 dark:hover:border-emerald-500/50 dark:bg-slate-950/50 dark:hover:bg-slate-950 dark:text-slate-300"
-        >
-          {compressing ? (
-            <div className="flex flex-col items-center space-y-2.5">
-              <Loader2 className="w-7 h-7 animate-spin text-emerald-600 dark:text-emerald-400" />
-              <span className="text-xs font-medium text-slate-500">Compressing & Extracting EXIF...</span>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center space-y-2">
-              <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400">
-                <UploadCloud className="w-6 h-6" />
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={compressing}
+            className="h-32 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center p-4 text-center
+                       border-slate-300 hover:border-emerald-500 bg-white hover:bg-slate-50 text-slate-700
+                       dark:border-slate-800 dark:hover:border-emerald-500/50 dark:bg-slate-950/50 dark:hover:bg-slate-950 dark:text-slate-300"
+          >
+            {compressing ? (
+              <Loader2 className="w-5 h-5 animate-spin text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <div className="flex flex-col items-center space-y-1.5">
+                <Camera className="w-5 h-5" />
+                <p className="text-xs font-bold">Take Photo</p>
               </div>
-              <div>
-                <p className="text-xs sm:text-sm font-bold">Tap to capture or upload evidence</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Auto-converted to compressed WebP</p>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={compressing}
+            className="h-32 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center p-4 text-center
+                       border-slate-300 hover:border-emerald-500 bg-white hover:bg-slate-50 text-slate-700
+                       dark:border-slate-800 dark:hover:border-emerald-500/50 dark:bg-slate-950/50 dark:hover:bg-slate-950 dark:text-slate-300"
+          >
+            {compressing ? (
+              <Loader2 className="w-5 h-5 animate-spin text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <div className="flex flex-col items-center space-y-1.5">
+                <UploadCloud className="w-5 h-5" />
+                <p className="text-xs font-bold">Upload File</p>
               </div>
-            </div>
-          )}
-        </button>
+            )}
+          </button>
+        </div>
+      )}
+
+      {!previewUrl && (
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center">Auto-converted to compressed WebP</p>
       )}
 
       {/* EXIF Metadata Audit Box */}
