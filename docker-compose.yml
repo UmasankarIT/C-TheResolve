@@ -3,6 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Inlined into the client bundle at build time (compose reads the
+        # project-root .env for ${...} substitution).
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:-}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-}
     container_name: civicresolve_app
     restart: unless-stopped
     depends_on:
@@ -10,6 +16,11 @@ services:
         condition: service_healthy
       civic-minio:
         condition: service_healthy
+    # Runtime config the app's server reads at process start (Firebase admin
+    # credentials, public project id). `environment:` below still wins for any
+    # key listed there, so DATABASE_URL keeps pointing at the container DNS.
+    env_file:
+      - .env.local
     environment:
       DATABASE_URL: postgresql://postgres:postgrespassword@civic-postgres:5432/civicresolve
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

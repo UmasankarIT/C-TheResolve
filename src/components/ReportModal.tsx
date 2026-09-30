@@ -1,26 +1,28 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  X, 
-  Construction, 
-  Droplets, 
-  Trash2, 
-  Lightbulb, 
-  Waves, 
+import {
+  X,
+  Construction,
+  Droplets,
+  Trash2,
+  Lightbulb,
+  Waves,
   HelpCircle,
-  CheckCircle2, 
-  AlertCircle, 
-  Loader2, 
+  CheckCircle2,
+  AlertCircle,
+  AlertTriangle,
+  Loader2,
   Send,
   Zap,
   Mic,
   MicOff,
-  Globe
+  Globe,
+  TrendingUp
 } from 'lucide-react';
 import { LocationPicker, LocationData } from './LocationPicker';
 import { MediaUpload } from './MediaUpload';
-import { Category, ExifMetadata, SubmissionResponse, LocationFix } from '@/lib/types';
+import { Category, ExifMetadata, ReportIntent, SubmissionResponse, LocationFix } from '@/lib/types';
 import { SupportedLanguage, SUPPORTED_LANGUAGES, TRANSLATIONS } from '@/lib/languages';
 
 interface ReportModalProps {
@@ -56,6 +58,9 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   const activeLangMeta = SUPPORTED_LANGUAGES.find((l) => l.code === lang) || SUPPORTED_LANGUAGES[0];
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || '');
+  // Complaint by default; development requests are opt-in and submit without
+  // requiring a photo (there is often nothing to photograph yet).
+  const [intent, setIntent] = useState<ReportIntent>('complaint');
   const [location, setLocation] = useState<LocationData>({
     latitude: DEFAULT_LAT,
     longitude: DEFAULT_LNG,
@@ -267,7 +272,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
       return;
     }
 
-    if (!imageUrl) {
+    if (!imageUrl && intent === 'complaint') {
       setErrorMessage('Please capture or select an image evidence.');
       return;
     }
@@ -298,6 +303,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
     try {
       const payload = {
         categoryId: selectedCategoryId,
+        intent,
         latitude: location.latitude,
         longitude: location.longitude,
         accuracyMeters: location.accuracyMeters,
@@ -349,6 +355,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
     setErrorMessage(null);
     setImageUrl('');
     setNotes('');
+    setIntent('complaint');
     onClose();
   };
 
@@ -448,6 +455,41 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                 </div>
               )}
 
+              {/* 0. Intent: report an existing problem vs request new development */}
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIntent('complaint')}
+                    className={`flex items-center justify-center space-x-2 p-3 rounded-2xl border text-xs font-bold transition-all ${
+                      intent === 'complaint'
+                        ? 'bg-rose-50 border-rose-500 text-rose-900 shadow-sm dark:bg-rose-500/15 dark:border-rose-500 dark:text-white'
+                        : 'bg-slate-50/70 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-950/60 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-950'
+                    }`}
+                  >
+                    <AlertTriangle className={`w-4 h-4 ${intent === 'complaint' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`} />
+                    <span>Report a problem</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIntent('development_request')}
+                    className={`flex items-center justify-center space-x-2 p-3 rounded-2xl border text-xs font-bold transition-all ${
+                      intent === 'development_request'
+                        ? 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm dark:bg-amber-500/15 dark:border-amber-500 dark:text-white'
+                        : 'bg-slate-50/70 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-950/60 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-950'
+                    }`}
+                  >
+                    <TrendingUp className={`w-4 h-4 ${intent === 'development_request' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`} />
+                    <span>Request development</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {intent === 'complaint'
+                    ? 'Something is broken today — report it with photo evidence.'
+                    : 'Ask for something new — a road, water line, bus stop or streetlight. Photo optional; describe what is missing.'}
+                </p>
+              </div>
+
               {/* 1. Category Selection */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -484,6 +526,11 @@ export const ReportModal: React.FC<ReportModalProps> = ({
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   2. {t.stepPhoto}
+                  {intent === 'development_request' && (
+                    <span className="ml-2 normal-case tracking-normal text-amber-600 dark:text-amber-400 font-semibold">
+                      (optional for development requests)
+                    </span>
+                  )}
                 </label>
                 <MediaUpload
                   reportedLatitude={location.latitude}

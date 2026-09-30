@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { civicStore } from '@/lib/store';
 import { getSession, isRole, unauthorized, denied } from '@/lib/auth';
-import { toDemandSignalJson } from '@/lib/demandSignals';
-import { scoreDemandSignals } from '@/lib/priorityScore';
+import { filterByIntent, parseIntentParam, toDemandSignalJson } from '@/lib/demandSignals';
+import { scoreDemandSignalsByIntent } from '@/lib/priorityScore';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +13,10 @@ export const dynamic = 'force-dynamic';
  * screen can always be traced back to the complaints and the threshold that
  * produced it.
  *
- * Clusters are re-scored on every read (volume and population are min-max
- * scaled over the stored set) and returned highest priority first, so the
- * dashboard shows a current ranking even between builds.
+ * `?intent=complaint|development_request|all` (default `all`) filters the
+ * clusters. Clusters are re-scored on every read (volume and population are
+ * min-max scaled over the stored set) and returned highest priority first, so
+ * the dashboard shows a current ranking even between builds.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -23,8 +24,9 @@ export async function GET(req: NextRequest) {
     if (!user) return unauthorized('Sign in to view demand signals.');
     if (!isRole(user, 'city_admin')) return denied('Only the city admin can view demand signals.');
 
-    const signals = await civicStore.listDemandSignals();
-    const scored = scoreDemandSignals(signals);
+    const intent = parseIntentParam(new URL(req.url).searchParams.get('intent'));
+    const signals = filterByIntent(await civicStore.listDemandSignals(), intent);
+    const scored = scoreDemandSignalsByIntent(signals);
 
     return NextResponse.json({
       generated_at: new Date().toISOString(),

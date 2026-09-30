@@ -8,6 +8,7 @@ import {
   Issue,
   IssueReport,
   ProofOfWork,
+  ReportIntent,
 } from './types';
 
 export interface IssueStatusUpdate {
@@ -56,7 +57,8 @@ export interface CivicStore {
     latitude: number,
     longitude: number,
     categoryId: string,
-    thresholdMeters?: number
+    thresholdMeters?: number,
+    intent?: ReportIntent
   ): Promise<{ issue: Issue; distanceMeters: number } | null>;
 
   getDepartments(): Promise<Department[]>;

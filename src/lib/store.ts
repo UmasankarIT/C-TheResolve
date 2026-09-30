@@ -8,6 +8,7 @@ import {
   Issue,
   IssueReport,
   ProofOfWork,
+  ReportIntent,
 } from './types';
 import { calculatePriorityScore } from './scoring';
 import { findNearbyActiveIssue } from './spatial';
@@ -152,9 +153,17 @@ class MemoryStore implements CivicStore {
     latitude: number,
     longitude: number,
     categoryId: string,
-    thresholdMeters: number = 25
+    thresholdMeters: number = 25,
+    intent: ReportIntent = 'complaint'
   ): Promise<{ issue: Issue; distanceMeters: number } | null> {
-    return findNearbyActiveIssue(latitude, longitude, categoryId, await this.getIssues(), thresholdMeters);
+    return findNearbyActiveIssue(
+      latitude,
+      longitude,
+      categoryId,
+      await this.getIssues(),
+      thresholdMeters,
+      intent
+    );
   }
 
   // --- Proof of work ---

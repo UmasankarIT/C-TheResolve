@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type * as L from 'leaflet';
-import type { DemandSignalJson } from '@/lib/demandSignals';
+import type { DemandSignalJson, IntentFilter } from '@/lib/demandSignals';
 import { Loader2, MapPinned, X, ChevronDown } from 'lucide-react';
 
 /**
@@ -284,12 +284,56 @@ function DemandSignalMap({
   );
 }
 
+/** Two peer views of the same pipeline: what is broken vs what is missing. */
+function IntentTabs({
+  value,
+  onChange,
+}: {
+  value: Exclude<IntentFilter, 'all'>;
+  onChange: (next: Exclude<IntentFilter, 'all'>) => void;
+}) {
+  const tabs: { key: Exclude<IntentFilter, 'all'>; label: string }[] = [
+    { key: 'complaint', label: 'Civic problems' },
+    { key: 'development_request', label: 'Development requests' },
+  ];
+  return (
+    <div className="flex rounded-full bg-slate-100 dark:bg-slate-800 p-1 w-fit text-[11px] font-bold">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          onClick={() => onChange(tab.key)}
+          className={`px-4 py-1.5 rounded-full transition ${
+            value === tab.key
+              ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function DemandSignalsPanel() {
   const [list, setList] = useState<DemandSignalJson[] | null>(null);
   const [markers, setMarkers] = useState<MapMarker[]>([]);
   const [detail, setDetail] = useState<DemandSignalDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Two peer views: today's problems vs demands for what does not exist yet.
+  // Complaints are the default view; requests are one tab away.
+  const [intentFilter, setIntentFilter] = useState<Exclude<IntentFilter, 'all'>>('complaint');
+
+  // `load` is deliberately stable so a tab change is its only trigger besides
+  // mount and the Refresh button — it reads the live values through refs
+  // instead of closing over them, which would re-run it on every detail
+  // change (detail is set by load itself, so that would loop).
+  const intentFilterRef = useRef(intentFilter);
+  intentFilterRef.current = intentFilter;
+  const detailIdRef = useRef<string | null>(null);
+  detailIdRef.current = detail?.cluster_id ?? null;
 
   const loadDetail = useCallback(async (signalId: string) => {
     setDetail(null);
@@ -306,9 +350,11 @@ export function DemandSignalsPanel() {
     setLoading(true);
     setError(null);
     try {
+      const intent = intentFilterRef.current;
+      const query = `?intent=${intent}`;
       const [listRes, mapRes] = await Promise.all([
-        fetch('/api/demand-signals', { cache: 'no-store' }),
-        fetch('/api/demand-signals/map', { cache: 'no-store' }),
+        fetch(`/api/demand-signals${query}`, { cache: 'no-store' }),
+        fetch(`/api/demand-signals/map${query}`, { cache: 'no-store' }),
       ]);
       if (!listRes.ok) throw new Error('Failed to load ranked demand signals.');
       const listJson = await listRes.json();
@@ -316,11 +362,12 @@ export function DemandSignalsPanel() {
       const clusters = (listJson.clusters ?? []) as DemandSignalJson[];
       setList(clusters);
       setMarkers((mapJson.markers as MapMarker[]) ?? []);
-      // If a drill-down was open and the cluster still exists, re-fetch it so
-      // the numbers stay current with the freshly scored list.
-      const open = detail?.cluster_id;
-      if (open && clusters.some((c) => c.cluster_id === open)) {
-        loadDetail(open);
+      // If a drill-down was open: refresh it when the cluster still exists in
+      // this view, close it when the tab switch left it behind.
+      const open = detailIdRef.current;
+      if (open) {
+        if (clusters.some((c) => c.cluster_id === open)) loadDetail(open);
+        else setDetail(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
@@ -328,12 +375,12 @@ export function DemandSignalsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [detail, loadDetail]);
+  }, [loadDetail]);
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [intentFilter]);
 
   const selectCluster = useCallback(
     (signalId: string) => {
@@ -368,15 +415,28 @@ export function DemandSignalsPanel() {
 
   if (!list || list.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center">
-        <MapPinned className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
-        <p className="mt-3 text-sm font-semibold">No demand signals yet</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{error ?? 'Run a build to cluster reports and rank them by priority.'}</p>
+      <div className="space-y-4">
+        <IntentTabs value={intentFilter} onChange={setIntentFilter} />
+        <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center">
+          <MapPinned className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+          <p className="mt-3 text-sm font-semibold">
+            {intentFilter === 'development_request'
+              ? 'No development requests clustered yet'
+              : 'No demand signals yet'}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {error ??
+              (intentFilter === 'development_request'
+                ? 'Citizens can submit development requests from the report form; cluster them with a build.'
+                : 'Run a build to cluster reports and rank them by priority.')}
+          </p>
+        </div>
       </div>
     );
   }
 
   const totalComplaints = list.reduce((sum, s) => sum + s.volume, 0);
+  const volumeNoun = intentFilter === 'development_request' ? 'requests' : 'complaints';
 
   return (
     <div className="space-y-4">
@@ -396,6 +456,8 @@ export function DemandSignalsPanel() {
         </button>
       </div>
 
+      <IntentTabs value={intentFilter} onChange={setIntentFilter} />
+
       <DemandSignalMap markers={markers} onSelect={selectCluster} selectedId={detail?.cluster_id ?? null} />
 
       {detail && <DrillDownPanel signal={detail} onClose={() => setDetail(null)} />}
@@ -403,7 +465,7 @@ export function DemandSignalsPanel() {
       <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
           <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-            Ranked list · {list.length} clusters · {totalComplaints} complaints · highest priority first
+            Ranked list · {list.length} clusters · {totalComplaints} {volumeNoun} · highest priority first
           </p>
           <span className="text-[10px] text-slate-400">click a row to drill down</span>
         </div>

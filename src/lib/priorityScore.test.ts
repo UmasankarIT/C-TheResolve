@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DemandSignal } from './types';
 import {
   scoreDemandSignals,
+  scoreDemandSignalsByIntent,
   combinePriorityComponents,
   normalizeAvgUrgency,
   infrastructureGapScore,
@@ -372,5 +373,50 @@ describe('scoreDemandSignals', () => {
 
   it('returns an empty ranking for an empty set', () => {
     expect(scoreDemandSignals([])).toEqual([]);
+  });
+});
+
+describe('scoreDemandSignalsByIntent', () => {
+  it('scales each intent over its own set, not the merged one', () => {
+    // Three complaints at volumes 10/20/30 plus one lone request at volume 1.
+    // Merged, the request would normalise to 0 and the smallest complaint to
+    // 0; grouped, each peer group covers its own range.
+    const complaints = [10, 20, 30].map((volume, i) =>
+      makeSignal({ clusterId: `C${i}`, volume, intent: 'complaint' })
+    );
+    const request = makeSignal({ clusterId: 'R0', volume: 1, intent: 'development_request' });
+
+    const grouped = scoreDemandSignalsByIntent([...complaints, request]);
+    expect(grouped).toHaveLength(4);
+
+    const req = grouped.find((s) => s.clusterId === 'R0')!;
+    expect(req.priorityBreakdown.normalizedVolume).toBe(1);
+    const small = grouped.find((s) => s.clusterId === 'C0')!;
+    expect(small.priorityBreakdown.normalizedVolume).toBe(0);
+
+    // The complaint group's own scaling is untouched by the request's absence.
+    const withoutRequest = scoreDemandSignals(complaints);
+    const withRequest = scoreDemandSignalsByIntent([...complaints, request]).filter(
+      (s) => s.intent === 'complaint'
+    );
+    expect(withRequest.map((s) => [s.clusterId, s.priorityScore])).toEqual(
+      withoutRequest.map((s) => [s.clusterId, s.priorityScore])
+    );
+  });
+
+  it('treats rows without an intent as complaints', () => {
+    const grouped = scoreDemandSignalsByIntent([
+      makeSignal({ clusterId: 'A', volume: 5 }),
+      makeSignal({ clusterId: 'B', volume: 1, intent: 'development_request' }),
+    ]);
+    expect(grouped).toHaveLength(2);
+    // A and B are separate peer groups: each is alone in its group, so both
+    // take the full-range treatment for their own intent.
+    expect(grouped.find((s) => s.clusterId === 'A')!.priorityBreakdown.normalizedVolume).toBe(1);
+    expect(grouped.find((s) => s.clusterId === 'B')!.priorityBreakdown.normalizedVolume).toBe(1);
+  });
+
+  it('returns an empty ranking for an empty set', () => {
+    expect(scoreDemandSignalsByIntent([])).toEqual([]);
   });
 });

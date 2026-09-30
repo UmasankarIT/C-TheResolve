@@ -151,6 +151,7 @@ export interface Issue {
     departmentId?: string;         // routing target (DEPT_*)
     jurisdictionCode?: string;     // ward/block scope
     state?: string;                // administrative state, promoted out of locationDetails for querying
+  intent?: ReportIntent;          // complaint (default) vs development_request
   citizenUserId?: string;        // who reported it (for "My Reports")
   citizenName?: string;
   slaDeadlineAt?: string;        // SLA timer set on assignment
@@ -180,6 +181,8 @@ export interface CreateReportRequest {
   accuracyMeters: number;
   isOnSite: boolean;
   imageUrl: string;
+  /** Defaults to `complaint`. Development requests allow submitting without a photo. */
+  intent?: ReportIntent;
   title?: string;
   citizenNotes?: string;
   transcript?: string;
@@ -209,6 +212,16 @@ export type LocationGranularity = 'ward' | 'district' | 'state' | 'unknown';
 export type PipelineEngine = 'gemini' | 'heuristic' | 'unavailable';
 
 /**
+ * What a report is asking for. A `complaint` describes a problem that exists
+ * today; a `development_request` asks for infrastructure that does not exist
+ * yet (a new bus stop, a water pipeline extension). The pipeline buckets,
+ * scores and lists the two separately — a complaint must never merge into a
+ * development request or vice versa. Optional on every shape so rows written
+ * before this existed read back as `complaint`, which is what they were.
+ */
+export type ReportIntent = 'complaint' | 'development_request';
+
+/**
  * One citizen's account of a civic problem, with the structured fields the
  * demand-signal pipeline buckets on. Distinct from `Issue`: an issue is an
  * aggregated incident at a physical point, a complaint is a single account.
@@ -219,6 +232,8 @@ export interface Complaint {
   sourceReportId?: string;
   /** What kind of problem this is. Stage 1 never merges across two of these. */
   issueType: string;
+  /** Complaint or development request. Stage 1 never merges across intents. */
+  intent?: ReportIntent;
   locationState?: string;
   locationDistrict?: string;
   locationWard?: string;
@@ -244,6 +259,8 @@ export interface Complaint {
 export interface DemandSignal {
   clusterId: string;
   issueType: string;
+  /** All members share it (Stage 1 buckets per intent); `complaint` when unset. */
+  intent?: ReportIntent;
   location: string;
   locationState?: string;
   locationDistrict?: string;

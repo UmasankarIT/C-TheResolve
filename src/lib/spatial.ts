@@ -1,4 +1,4 @@
-import { Issue } from './types';
+import { Issue, ReportIntent } from './types';
 import { isTerminalStatus } from './workflow';
 
 const EARTH_RADIUS_METERS = 6371008.8; // WGS 84 mean radius
@@ -49,13 +49,18 @@ export function findNearbyActiveIssue(
   lng: number,
   categoryId: string,
   issues: Issue[],
-  thresholdMeters: number = 25
+  thresholdMeters: number = 25,
+  intent: ReportIntent = 'complaint'
 ): { issue: Issue; distanceMeters: number } | null {
   let closest: { issue: Issue; distanceMeters: number } | null = null;
 
   for (const issue of issues) {
     // Only aggregate against active, unresolved issues with identical category
     if (issue.categoryId !== categoryId) continue;
+    // Complaints and development requests are separate peer groups: a fresh
+    // report must dedup against a row of its own intent only, never against
+    // the other kind sitting at the same coordinates.
+    if ((issue.intent ?? 'complaint') !== intent) continue;
     // Terminal means terminal, including `merged`: aggregating a fresh report
     // into a merged issue would silently discard it from active demand.
     if (isTerminalStatus(issue.status)) continue;

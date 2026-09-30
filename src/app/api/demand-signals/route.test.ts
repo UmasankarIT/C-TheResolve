@@ -103,6 +103,60 @@ describe('GET /api/demand-signals — public ranked list', () => {
     expect(body.count).toBe(0);
     expect(body.clusters).toEqual([]);
   });
+
+  it('serialises every cluster with its intent, defaulting to complaint', async () => {
+    store.listDemandSignals.mockResolvedValue([
+      makeSignal(),
+      makeSignal({ clusterId: 'DS-0002', intent: 'development_request' }),
+    ]);
+    const body = await (await listGet(new Request('http://localhost/api/demand-signals') as never)).json();
+    expect(body.clusters.map((c: { intent: string }) => c.intent)).toEqual([
+      'complaint',
+      'development_request',
+    ]);
+  });
+
+  it('filters clusters by ?intent= and falls back to all on an unknown value', async () => {
+    const mixed = [
+      makeSignal({ clusterId: 'DS-0001', intent: 'complaint' }),
+      makeSignal({ clusterId: 'DS-0002', intent: 'development_request' }),
+    ];
+    store.listDemandSignals.mockResolvedValue(mixed);
+
+    const requests = await (
+      await listGet(new Request('http://localhost/api/demand-signals?intent=development_request') as never)
+    ).json();
+    expect(requests.count).toBe(1);
+    expect(requests.clusters[0].cluster_id).toBe('DS-0002');
+
+    const complaints = await (
+      await listGet(new Request('http://localhost/api/demand-signals?intent=complaint') as never)
+    ).json();
+    expect(complaints.count).toBe(1);
+    expect(complaints.clusters[0].cluster_id).toBe('DS-0001');
+
+    const everything = await (
+      await listGet(new Request('http://localhost/api/demand-signals?intent=nonsense') as never)
+    ).json();
+    expect(everything.count).toBe(2);
+  });
+
+  it('scores each intent against its own peers so a request never pins to zero', async () => {
+    store.listDemandSignals.mockResolvedValue([
+      makeSignal({ clusterId: 'DS-01', volume: 10, avgUrgency: 3, intent: 'complaint' }),
+      makeSignal({ clusterId: 'DS-02', volume: 30, avgUrgency: 3, intent: 'complaint' }),
+      makeSignal({ clusterId: 'DS-REQ', volume: 1, avgUrgency: 3, intent: 'development_request' }),
+    ]);
+    const body = await (await listGet(new Request('http://localhost/api/demand-signals') as never)).json();
+    const byId = Object.fromEntries(body.clusters.map((c: { cluster_id: string }) => [c.cluster_id, c]));
+    // The request is alone in its peer group → full range, even though its
+    // volume of 1 sits far below every complaint. Under a shared min-max it
+    // would have normalised to 0 and been stuck at the bottom of the ranking.
+    expect(byId['DS-REQ'].priority_breakdown.normalized_volume).toBe(1);
+    // The complaint pair still scales against each other, unaffected.
+    expect(byId['DS-01'].priority_breakdown.normalized_volume).toBe(0);
+    expect(byId['DS-02'].priority_breakdown.normalized_volume).toBe(1);
+  });
 });
 
 describe('GET /api/demand-signals/{signalId} — drill-down', () => {
@@ -179,6 +233,7 @@ describe('GET /api/demand-signals/map — plot projection', () => {
     expect(body.markers[0]).toMatchObject({
       cluster_id: 'DS-0001',
       issue_type: 'pothole',
+      intent: 'complaint',
       location: 'Visakhapatnam, Andhra Pradesh',
       volume: 2,
       priority_score: 0.792,

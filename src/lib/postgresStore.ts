@@ -20,6 +20,7 @@ import {
   LocationGranularity,
   PipelineEngine,
   ProofOfWork,
+  ReportIntent,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,7 @@ interface IssueRow {
   departmentId: string | null;
   jurisdictionCode: string | null;
   state: string | null;
+  intent: string | null;
   citizenUserId: string | null;
   citizenName: string | null;
   slaDeadlineAt: Date | null;
@@ -88,8 +90,10 @@ interface ReportRow {
   createdAt: Date;
 }
 
-const ISSUE_SELECT = `
-  SELECT
+// One column list for every issue read, so the spatial dedup query and the
+// plain selects cannot drift. Aliases matter: node-pg delivers columns by
+// their result name, and `toIssue` reads the camelCase form.
+const ISSUE_SELECT_COLUMNS = `
     i.id,
     i.category_id AS "categoryId",
     i.title,
@@ -105,6 +109,7 @@ const ISSUE_SELECT = `
     i.department_id AS "departmentId",
     i.jurisdiction_code AS "jurisdictionCode",
     i.state,
+    i.intent,
     i.citizen_user_id AS "citizenUserId",
     i.citizen_name AS "citizenName",
     i.sla_deadline_at AS "slaDeadlineAt",
@@ -132,6 +137,10 @@ const ISSUE_SELECT = `
     c.default_sla_hours AS "cDefaultSlaHours",
     c.responsible_department AS "cResponsibleDepartment",
     c.icon_name AS "cIconName"
+`;
+
+const ISSUE_SELECT = `
+  SELECT ${ISSUE_SELECT_COLUMNS}
   FROM issues i
   JOIN categories c ON c.id = i.category_id
 `;
@@ -190,6 +199,7 @@ function toIssue(r: IssueRow): Issue {
     departmentId: r.departmentId ?? undefined,
       jurisdictionCode: r.jurisdictionCode ?? undefined,
       state: r.state ?? undefined,
+    intent: r.intent === 'development_request' ? 'development_request' : 'complaint',
     citizenUserId: r.citizenUserId ?? undefined,
     citizenName: r.citizenName ?? undefined,
     slaDeadlineAt: iso(r.slaDeadlineAt),
@@ -257,6 +267,7 @@ interface ComplaintRow {
   sourceIssueId: string | null;
   sourceReportId: string | null;
   issueType: string;
+  intent: string | null;
   locationState: string | null;
   locationDistrict: string | null;
   locationWard: string | null;
@@ -277,6 +288,7 @@ interface ComplaintRow {
 interface DemandSignalRow {
   clusterId: string;
   issueType: string;
+  intent: string | null;
   location: string;
   locationState: string | null;
   locationDistrict: string | null;
@@ -310,6 +322,7 @@ function toComplaint(r: ComplaintRow): Complaint {
     sourceIssueId: r.sourceIssueId ?? undefined,
     sourceReportId: r.sourceReportId ?? undefined,
     issueType: r.issueType,
+    intent: r.intent === 'development_request' ? 'development_request' : 'complaint',
     locationState: r.locationState ?? undefined,
     locationDistrict: r.locationDistrict ?? undefined,
     locationWard: r.locationWard ?? undefined,
@@ -332,6 +345,7 @@ function toDemandSignal(r: DemandSignalRow): DemandSignal {
   return {
     clusterId: r.clusterId,
     issueType: r.issueType,
+    intent: r.intent === 'development_request' ? 'development_request' : 'complaint',
     location: r.location,
     locationState: r.locationState ?? undefined,
     locationDistrict: r.locationDistrict ?? undefined,
@@ -452,11 +466,11 @@ export class PostgresStore implements CivicStore {
               sla_deadline_at, verified_at, merged_into_id, transcript,
               report_count, upvotes_count, ml_severity_score, priority_score, image_url,
               ml_analysis, reassign_request, proof, resolution_notes, resolution_proof_url,
-              resolved_at, created_at, updated_at)
+              resolved_at, created_at, updated_at, intent)
            VALUES
               ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, $8,
                $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-               $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)`,
+               $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
           [
             issue.id,
             issue.categoryId,
@@ -492,6 +506,7 @@ export class PostgresStore implements CivicStore {
             issue.resolvedAt ?? null,
             issue.createdAt,
             issue.updatedAt,
+            issue.intent ?? 'complaint',
           ]
         );
       }
@@ -710,15 +725,23 @@ for (const dept of DEFAULT_DEPARTMENTS) {
     latitude: number,
     longitude: number,
     categoryId: string,
-    thresholdMeters: number = 25
+    thresholdMeters: number = 25,
+    intent: ReportIntent = 'complaint'
   ): Promise<{ issue: Issue; distanceMeters: number } | null> {
     await this.ensureReady();
     const { rows } = await this.q<IssueRow & { distance_meters: number }>(
-      `SELECT *, ST_Distance(i.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
+      // Shared column list rather than `SELECT *` across the join: node-pg
+      // builds the row as a plain object, so a column the category table
+      // shares with issues (id, description) would overwrite the issue's
+      // value with the category's — and the dedup path would insert a report
+      // keyed to a category id, which fails the issue_reports foreign key.
+      `SELECT ${ISSUE_SELECT_COLUMNS},
+              ST_Distance(i.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
               AS distance_meters
          FROM issues i
          JOIN categories c ON c.id = i.category_id
         WHERE i.category_id = $3
+          AND i.intent = $5
           AND i.status NOT IN ('resolved', 'merged', 'rejected')
           AND ST_DWithin(
                 i.location,
@@ -727,7 +750,7 @@ for (const dept of DEFAULT_DEPARTMENTS) {
               )
         ORDER BY distance_meters ASC
         LIMIT 1`,
-      [longitude, latitude, categoryId, thresholdMeters]
+      [longitude, latitude, categoryId, thresholdMeters, intent]
     );
     if (!rows[0]) return null;
     const [issue] = await this.attachReports([toIssue(rows[0])]);
@@ -745,11 +768,11 @@ for (const dept of DEFAULT_DEPARTMENTS) {
           sla_deadline_at, verified_at, merged_into_id, transcript,
           report_count, upvotes_count, ml_severity_score, priority_score, image_url,
           ml_analysis, reassign_request, proof, resolution_notes, resolution_proof_url,
-          resolved_at, created_at, updated_at)
+          resolved_at, created_at, updated_at, intent)
        VALUES
           ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, $8,
            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-           $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)`,
+           $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
       [
         issue.id,
         issue.categoryId,
@@ -785,6 +808,7 @@ for (const dept of DEFAULT_DEPARTMENTS) {
         issue.resolvedAt ?? null,
         issue.createdAt,
         issue.updatedAt,
+        issue.intent ?? 'complaint',
       ]
     );
     return issue;
@@ -1144,6 +1168,7 @@ for (const dept of DEFAULT_DEPARTMENTS) {
               source_issue_id AS "sourceIssueId",
               source_report_id AS "sourceReportId",
               issue_type AS "issueType",
+              intent,
               location_state AS "locationState",
               location_district AS "locationDistrict",
               location_ward AS "locationWard",
@@ -1172,7 +1197,7 @@ for (const dept of DEFAULT_DEPARTMENTS) {
     // One multi-row INSERT rather than N round trips: a full rebuild touches
     // every complaint in the corpus, and at a few hundred rows the per-statement
     // latency dominates everything else in the build.
-    const columns = 15;
+    const columns = 16;
     const values: unknown[] = [];
     const tuples = complaints.map((c, row) => {
       const base = row * columns;
@@ -1191,9 +1216,10 @@ for (const dept of DEFAULT_DEPARTMENTS) {
         c.originalLanguage,
         c.originalText,
         c.translatedText,
-        c.extractionEngine
+        c.extractionEngine,
+        c.intent ?? 'complaint'
       );
-      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}, $${base + 13}, $${base + 14}, $${base + 15})`;
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}, $${base + 13}, $${base + 14}, $${base + 15}, $${base + 16})`;
     });
 
     await this.q(
@@ -1201,7 +1227,7 @@ for (const dept of DEFAULT_DEPARTMENTS) {
          (id, source_issue_id, source_report_id, issue_type, location_state,
           location_district, location_ward, location, location_granularity,
           urgency_score, urgency_reason, original_language, original_text,
-          translated_text, extraction_engine)
+          translated_text, extraction_engine, intent)
        VALUES ${tuples.join(', ')}
        ON CONFLICT (id) DO UPDATE SET
          source_issue_id = EXCLUDED.source_issue_id,
@@ -1218,6 +1244,7 @@ for (const dept of DEFAULT_DEPARTMENTS) {
          original_text = EXCLUDED.original_text,
          translated_text = EXCLUDED.translated_text,
          extraction_engine = EXCLUDED.extraction_engine,
+         intent = EXCLUDED.intent,
          updated_at = CURRENT_TIMESTAMP`,
       values
     );
@@ -1255,7 +1282,7 @@ for (const dept of DEFAULT_DEPARTMENTS) {
     await this.q('DELETE FROM demand_signals');
     if (fused.length === 0) return;
 
-    const columns = 16;
+    const columns = 17;
     const values: unknown[] = [];
     const tuples = fused.map((s, row) => {
       const base = row * columns;
@@ -1275,9 +1302,10 @@ for (const dept of DEFAULT_DEPARTMENTS) {
         s.verificationEngine,
         s.populationAffected ?? null,
         s.existingInfrastructureGap ?? null,
-        s.dataFusionSource ?? null
+        s.dataFusionSource ?? null,
+        s.intent ?? 'complaint'
       );
-      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}, $${base + 13}, $${base + 14}, $${base + 15}, $${base + 16})`;
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}, $${base + 13}, $${base + 14}, $${base + 15}, $${base + 16}, $${base + 17})`;
     });
 
     await this.q(
@@ -1285,7 +1313,8 @@ for (const dept of DEFAULT_DEPARTMENTS) {
          (cluster_id, issue_type, location, location_state, location_district,
           location_ward, member_complaint_ids, volume, avg_urgency, summary,
           languages_represented, similarity_threshold, verification_engine,
-          population_affected, existing_infrastructure_gap, data_fusion_source)
+          population_affected, existing_infrastructure_gap, data_fusion_source,
+          intent)
        VALUES ${tuples.join(', ')}`,
       values
     );
@@ -1296,6 +1325,7 @@ for (const dept of DEFAULT_DEPARTMENTS) {
     const { rows } = await this.q<DemandSignalRow>(
       `SELECT cluster_id AS "clusterId",
               issue_type AS "issueType",
+              intent,
               location,
               location_state AS "locationState",
               location_district AS "locationDistrict",

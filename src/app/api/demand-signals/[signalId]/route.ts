@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { civicStore } from '@/lib/store';
 import { toDemandSignalJson } from '@/lib/demandSignals';
-import { scoreDemandSignals } from '@/lib/priorityScore';
+import { scoreDemandSignalsByIntent } from '@/lib/priorityScore';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +25,9 @@ export async function GET(req: NextRequest, { params }: { params: { signalId: st
       return NextResponse.json({ error: 'No demand signals have been built yet.' }, { status: 404 });
     }
 
-    const scored = scoreDemandSignals(signals);
+    // Scored per intent over the whole stored set, so this drill-down's score
+    // is byte-identical to the ranked list's, however that list was filtered.
+    const scored = scoreDemandSignalsByIntent(signals);
     const signal = scored.find((s) => s.clusterId === signalId);
     if (!signal) {
       return NextResponse.json({ error: `No demand signal named "${signalId}".` }, { status: 404 });

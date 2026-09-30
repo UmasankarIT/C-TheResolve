@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Issue, IssueStatus, Category, Department, AuthUser } from '@/lib/types';
 import { StatusPill } from './StatusPill';
 import { DemandSignalsPanel } from './DemandSignalsPanel';
+import { SpendingAlignmentPanel } from './SpendingAlignmentPanel';
 import {
   Hotspot,
   HotspotsData,
@@ -936,6 +937,7 @@ function PolicymakerSection({ data, loading }: { data: HotspotsData | null; load
       )}
 
       <DemandSignalsPanel />
+      <SpendingAlignmentPanel />
     </div>
   );
 }

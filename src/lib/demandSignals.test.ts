@@ -214,6 +214,26 @@ describe('stage 1 — bucketComplaints', () => {
     ]);
     expect(buckets[0].complaints.map((c) => c.id)).toEqual(['c1']);
   });
+
+  it('never puts a complaint and a development request in the same bucket', () => {
+    // Same place, same issue type — only the intent differs, and that alone
+    // must keep the two apart or a request would merge into a complaint.
+    const buckets = bucketComplaints([
+      makeComplaint({ id: 'c1' }),
+      makeComplaint({ id: 'c2', intent: 'development_request' }),
+    ]);
+    expect(buckets).toHaveLength(2);
+    const [a, b] = buckets.map((bucket) => bucket.key).sort();
+    expect(a.startsWith('complaint::')).toBe(true);
+    expect(b.startsWith('development_request::')).toBe(true);
+    // Identical location + issue type; only the intent prefix differs.
+    expect(a.slice('complaint::'.length)).toBe(b.slice('development_request::'.length));
+  });
+
+  it('treats a complaint written without an intent as a complaint', () => {
+    const buckets = bucketComplaints([makeComplaint({ id: 'c1' })]);
+    expect(buckets[0].key.startsWith('complaint::')).toBe(true);
+  });
 });
 
 describe('cosineSimilarity', () => {
@@ -461,6 +481,15 @@ describe('complaintsFromIssues', () => {
     ]);
     expect(complaint.originalText).toBe('Deep crater near the school gate.');
     expect(complaint.translatedText).toBe('There is a pothole on the road.');
+  });
+
+  it('carries a development-request issue intent onto its complaints', () => {
+    const complaints = complaintsFromIssues([
+      issue({ intent: 'development_request', reports: [{ id: 'rep-1' }] as Issue['reports'] }),
+      issue({ id: 'iss-2' }),
+    ]);
+    expect(complaints[0].intent).toBe('development_request');
+    expect(complaints[1].intent).toBe('complaint');
   });
 });
 
@@ -754,6 +783,31 @@ describe('pickLead', () => {
   });
 });
 
+describe('toDemandSignal — intent', () => {
+  it('takes the intent from the members', () => {
+    const signal = toDemandSignal(
+      [makeComplaint({ id: 'c1', intent: 'development_request' })],
+      'A summary.',
+      0.75,
+      'gemini',
+      1
+    );
+    expect(signal.intent).toBe('development_request');
+  });
+
+  it('defaults to complaint when no member carries an intent', () => {
+    const signal = toDemandSignal([makeComplaint({ id: 'c1' })], 'A summary.', 0.75, 'gemini', 1);
+    expect(signal.intent).toBe('complaint');
+  });
+
+  it('serialises the intent into the published JSON', () => {
+    const json = toDemandSignalJson(
+      toDemandSignal([makeComplaint({ id: 'c1' })], 'A summary.', 0.75, 'gemini', 1)
+    );
+    expect(json.intent).toBe('complaint');
+  });
+});
+
 describe('toDemandSignalJson', () => {
   const signal = toDemandSignal(
     [
@@ -776,6 +830,7 @@ describe('toDemandSignalJson', () => {
         'data_fusion_source',
         'data_unavailable',
         'existing_infrastructure_gap',
+        'intent',
         'issue_type',
         'languages_represented',
         'location',

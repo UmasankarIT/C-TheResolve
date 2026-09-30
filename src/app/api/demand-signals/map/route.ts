@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { civicStore } from '@/lib/store';
-import { scoreDemandSignals } from '@/lib/priorityScore';
+import { filterByIntent, parseIntentParam } from '@/lib/demandSignals';
+import { scoreDemandSignalsByIntent } from '@/lib/priorityScore';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,14 +11,18 @@ export const dynamic = 'force-dynamic';
  * complaints' source reports (the nearest thing to ground truth the pipeline
  * keeps; complaints themselves carry district labels, not coordinates).
  *
+ * `?intent=complaint|development_request|all` (default `all`) filters the
+ * markers the same way the ranked list filters clusters.
+ *
  * A cluster whose complaints have no resolvable source report comes back with
  * null coordinates so the client can still show it in the ranked list while
  * omitting its marker, rather than inventing a pin.
  */
 export async function GET(req: NextRequest) {
   try {
-    const signals = await civicStore.listDemandSignals();
-    const scored = scoreDemandSignals(signals);
+    const intent = parseIntentParam(new URL(req.url).searchParams.get('intent'));
+    const signals = filterByIntent(await civicStore.listDemandSignals(), intent);
+    const scored = scoreDemandSignalsByIntent(signals);
 
     // complaint -> its source report's coordinates, for the visual placement of
     // the cluster. Both reads are full-table scans over a few hundred rows, so
@@ -48,6 +53,7 @@ export async function GET(req: NextRequest) {
       return {
         cluster_id: signal.clusterId,
         issue_type: signal.issueType,
+        intent: signal.intent ?? 'complaint',
         location: signal.location,
         location_state: signal.locationState ?? null,
         location_district: signal.locationDistrict ?? null,

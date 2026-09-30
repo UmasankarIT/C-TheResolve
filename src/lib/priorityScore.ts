@@ -1,4 +1,4 @@
-import { DemandSignal, PriorityBreakdown, PriorityWeights } from './types';
+import { DemandSignal, PriorityBreakdown, PriorityWeights, ReportIntent } from './types';
 
 // ---------------------------------------------------------------------------
 // Step 5 — transparent demand-signal priority scoring.
@@ -281,10 +281,37 @@ export function scoreDemandSignals(signals: DemandSignal[]): ScoredDemandSignal[
 
   // Ties break on volume then cluster id so the order is a function of the
   // corpus alone and a rebuild cannot reshuffle an equal-scoring pair.
-  return scored.sort(
-    (a, b) =>
-      b.priorityScore - a.priorityScore ||
-      b.volume - a.volume ||
-      a.clusterId.localeCompare(b.clusterId)
+  return scored.sort(compareScored);
+}
+
+/** Same tie-break everywhere a scored list leaves this module. */
+function compareScored(a: ScoredDemandSignal, b: ScoredDemandSignal): number {
+  return (
+    b.priorityScore - a.priorityScore ||
+    b.volume - a.volume ||
+    a.clusterId.localeCompare(b.clusterId)
   );
+}
+
+/**
+ * Scores each intent's clusters against that intent's own min-max ranges,
+ * then merges the groups into one list sorted by score.
+ *
+ * The volume term is min-max scaled, so mixing a small population of
+ * development requests with a large one of complaints would pin every request
+ * to the bottom of the shared range (and a lone request would normalise to 0).
+ * Each intent is an independent peer group: a request competes with other
+ * requests, a complaint with other complaints.
+ */
+export function scoreDemandSignalsByIntent(signals: DemandSignal[]): ScoredDemandSignal[] {
+  const groups = new Map<ReportIntent, DemandSignal[]>();
+  for (const signal of signals) {
+    const intent = signal.intent ?? 'complaint';
+    const group = groups.get(intent);
+    if (group) group.push(signal);
+    else groups.set(intent, [signal]);
+  }
+  const scored: ScoredDemandSignal[] = [];
+  for (const group of Array.from(groups.values())) scored.push(...scoreDemandSignals(group));
+  return scored.sort(compareScored);
 }

@@ -6,6 +6,7 @@ import {
   Issue,
   LocationGranularity,
   PipelineEngine,
+  ReportIntent,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -252,7 +253,10 @@ export function bucketComplaints(
       complaint.locationWard,
       ceiling
     );
-    const key = `${location.key}::${issueType}`;
+    // Intent prefixes the key so a complaint and a development request at the
+    // same place with the same issue type stay in separate buckets — the
+    // clustering stage only ever sees one intent at a time.
+    const key = `${complaint.intent ?? 'complaint'}::${location.key}::${issueType}`;
 
     const existing = buckets.get(key);
     if (existing) {
@@ -518,6 +522,7 @@ export function toDemandSignal(
   return {
     clusterId: `DS-${String(sequence).padStart(4, '0')}`,
     issueType: normalizeIssueType(representative.issueType) || 'unknown',
+    intent: representative.intent ?? 'complaint',
     location: representative.location,
     locationState: representative.locationState,
     locationDistrict: representative.locationDistrict,
@@ -568,6 +573,7 @@ export function complaintsFromIssues(issues: Issue[]): Complaint[] {
         sourceIssueId: issue.id,
         sourceReportId: report?.id,
         issueType: normalizeIssueType(issue.category?.code || 'unknown'),
+        intent: issue.intent ?? 'complaint',
         locationState: clean(issue.state ?? issue.locationDetails?.state) || undefined,
         locationDistrict: clean(issue.locationDetails?.district) || undefined,
         locationWard: clean(issue.wardId ?? issue.locationDetails?.mandal) || undefined,
@@ -710,6 +716,11 @@ export interface BuildStats {
 export interface DemandSignalJson {
   cluster_id: string;
   issue_type: string;
+  /**
+   * Always present (`complaint` when unset): the cluster never mixes intents,
+   * so this is a fixed two-value field, not an optional one.
+   */
+  intent: ReportIntent;
   location: string;
   location_state?: string;
   location_district?: string;
@@ -767,6 +778,7 @@ export function toDemandSignalJson(signal: DemandSignal): DemandSignalJson {
   const json: DemandSignalJson = {
     cluster_id: signal.clusterId,
     issue_type: signal.issueType,
+    intent: signal.intent ?? 'complaint',
     location: signal.location,
     complaint_ids: signal.memberComplaintIds,
     volume: signal.volume,
@@ -809,6 +821,28 @@ export function toDemandSignalJson(signal: DemandSignal): DemandSignalJson {
   if (signal.createdAt !== undefined) json.generated_at = signal.createdAt;
   if (signal.updatedAt !== undefined) json.updated_at = signal.updatedAt;
   return json;
+}
+
+/** `?intent=` accepted by every demand-signal read endpoint. */
+export type IntentFilter = ReportIntent | 'all';
+
+/**
+ * Parses an `intent` query parameter. Anything that is not one of the two
+ * intents means `all` — an unknown value degrades to the unfiltered view
+ * rather than to an empty one, so a typo in a client cannot blank the panel.
+ */
+export function parseIntentParam(raw: string | null | undefined): IntentFilter {
+  if (raw === 'complaint' || raw === 'development_request') return raw;
+  return 'all';
+}
+
+/** Applies an intent filter; rows written without an intent are complaints. */
+export function filterByIntent<T extends { intent?: ReportIntent }>(
+  rows: T[],
+  filter: IntentFilter
+): T[] {
+  if (filter === 'all') return rows;
+  return rows.filter((row) => (row.intent ?? 'complaint') === filter);
 }
 
 export interface BuildResult {

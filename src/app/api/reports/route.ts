@@ -5,7 +5,7 @@ import { reverseGeocode, formatAddress, type ReverseGeocodeResult } from '@/lib/
 import { calculatePriorityScore } from '@/lib/scoring';
 import { analyzeReportPhoto } from '@/lib/gemini';
 import { storeImageDataUrl } from '@/lib/objectStore';
-import { CreateReportRequest, Issue, IssueReport, LocationDetails } from '@/lib/types';
+import { CreateReportRequest, Issue, IssueReport, LocationDetails, MLAnalysis, ReportIntent } from '@/lib/types';
 import { getSession, unauthorized } from '@/lib/auth';
 import { departmentForCategory } from '@/lib/departments';
 import { slaDeadlineFor } from '@/lib/workflow';
@@ -23,9 +23,21 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as CreateReportRequest;
 
-    if (!body.categoryId || body.latitude === undefined || body.longitude === undefined || !body.imageUrl) {
+    // A complaint is an existing problem (photo required); a development
+    // request asks for something that does not exist yet — an empty plot or a
+    // missing bus stop is exactly what the citizen wants to show, and often
+    // there is no photo to take, so text (or voice) alone is accepted.
+    const intent: ReportIntent =
+      body.intent === 'development_request' ? 'development_request' : 'complaint';
+    const photoRequired = intent === 'complaint';
+
+    if (!body.categoryId || body.latitude === undefined || body.longitude === undefined || (photoRequired && !body.imageUrl)) {
       return NextResponse.json(
-        { error: 'Missing required parameters: categoryId, latitude, longitude, and imageUrl are required.' },
+        {
+          error: photoRequired
+            ? 'Missing required parameters: categoryId, latitude, longitude, and imageUrl are required.'
+            : 'Missing required parameters: categoryId, latitude, and longitude are required.',
+        },
         { status: 400 }
       );
     }
@@ -73,20 +85,38 @@ export async function POST(req: NextRequest) {
     // 2. Run the Computer Vision pipeline for categorization and severity.
     // Uses Google Gemini when GEMINI_API_KEY is configured (engine='gemini'),
     // else falls back to the deterministic keyword classifier.
-    const { analysis: mlAnalysis, engine: visionEngine } = await analyzeReportPhoto(
-      body.imageUrl,
-      category.code,
-      body.citizenNotes
-    );
-
-    if (!mlAnalysis.isCivicIssue) {
-      return NextResponse.json(
-        {
-          error: 'Uploaded image was flagged by ML as non-civic or spam.',
-          mlAnalysis,
-        },
-        { status: 422 }
-      );
+    //
+    // Skipped entirely when there is no photo: there is nothing to analyse, and
+    // the heuristic classifier must not be asked to verdict an empty string.
+    // The severity then comes from the category's own base weight — the same
+    // fallback the novel-incident path already used when a photo analysed to 0.
+    let mlAnalysis: MLAnalysis;
+    if (body.imageUrl) {
+      const photo = await analyzeReportPhoto(body.imageUrl, category.code, body.citizenNotes);
+      mlAnalysis = photo.analysis;
+      // The spam gate applies to complaints only. A development request
+      // legitimately photographs a site where nothing exists yet — an empty
+      // plot, a field without a road — and that is precisely what the vision
+      // model was trained to flag as non-civic. Rejecting it would make the
+      // photo-optional path impossible for its most natural use.
+      if (!mlAnalysis.isCivicIssue && intent === 'complaint') {
+        return NextResponse.json(
+          {
+            error: 'Uploaded image was flagged by ML as non-civic or spam.',
+            mlAnalysis,
+          },
+          { status: 422 }
+        );
+      }
+    } else {
+      mlAnalysis = {
+        predictedCategory: category.code,
+        categoryConfidence: 1,
+        estimatedSeverity: category.baseSeverityWeight * 2.5,
+        isCivicIssue: true,
+        detectedHazards: [],
+        inferenceLatencyMs: 0,
+      };
     }
 
     // Resolve the address server-side rather than trusting the client label.
@@ -113,17 +143,25 @@ export async function POST(req: NextRequest) {
     // bytes out of the request and into object storage. Deliberately after the
     // ML gate: a rejected or spammy upload should not leave an orphan object
     // behind. Gemini already has what it needs from the in-memory data URL
-    // above, so nothing here changes the AI path.
-    const storedImageUrl = await storeImageDataUrl(String(body.imageUrl || ''), 'issue');
+    // above, so nothing here changes the AI path. A photo-less development
+    // request stores an empty image URL rather than a placeholder URL that
+    // would claim a picture exists.
+    const storedImageUrl = body.imageUrl
+      ? await storeImageDataUrl(String(body.imageUrl), 'issue')
+      : '';
 
     // 3. Spatial dedup (25m threshold). The Postgres store answers this with an
     // indexed ST_DWithin query, so submission cost does not grow with the
-    // size of the issues table.
+    // size of the issues table. Scoped to the report's own intent: two
+    // citizens asking for the same missing water line in the same spot must
+    // aggregate, but a request must never attach to a pothole complaint
+    // (or vice versa) just because they share coordinates and category.
     const match = await civicStore.findNearbyActiveIssue(
       body.latitude,
       body.longitude,
       category.id,
-      25.0
+      25.0,
+      intent
     );
 
     const reportId = `rep-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -164,6 +202,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         issueId: existingIssue.id,
         isDuplicate: true,
+        intent,
         proximityDistanceMeters: match.distanceMeters,
         reportCount: updatedIssue ? updatedIssue.reportCount : existingIssue.reportCount + 1,
         status: existingIssue.status,
@@ -204,8 +243,17 @@ export async function POST(req: NextRequest) {
       id: issueId,
       categoryId: category.id,
       category,
-      title: body.title || `${category.name} Reported`,
-      description: body.citizenNotes || `Citizen reported ${category.name.toLowerCase()} requiring municipal attention.`,
+      intent,
+      title:
+        body.title ||
+        (intent === 'development_request'
+          ? `${category.name} Development Request`
+          : `${category.name} Reported`),
+      description:
+        body.citizenNotes ||
+        (intent === 'development_request'
+          ? `Citizen requested new ${category.name.toLowerCase()} infrastructure requiring municipal attention.`
+          : `Citizen reported ${category.name.toLowerCase()} requiring municipal attention.`),
       latitude: body.latitude,
       longitude: body.longitude,
       formattedAddress: formatAddress(
@@ -249,6 +297,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       issueId,
       isDuplicate: false,
+      intent,
       reportCount: 1,
       status: 'reported',
       departmentId: dept.id,

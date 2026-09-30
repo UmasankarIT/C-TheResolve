@@ -14,7 +14,7 @@ import {
   type BucketGranularity,
 } from '@/lib/demandSignals';
 import { withDistrictStatistics } from '@/lib/districtReference';
-import { scoreDemandSignals } from '@/lib/priorityScore';
+import { scoreDemandSignalsByIntent } from '@/lib/priorityScore';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -128,13 +128,15 @@ export async function POST(req: NextRequest) {
     note('joining district population and infrastructure reference data');
     const fused = withDistrictStatistics(signals);
 
-    // Step 5 — priority ranking. Scored over the full cluster set (volume and
-    // population are min-max scaled across these clusters and no others), then
-    // emitted highest score first, each with the human-readable explanation of
-    // its own numbers. Scores are recomputed per response, never stored, so a
-    // stale build cannot show a ranking that no longer matches the clusters.
+    // Step 5 — priority ranking. Scored per intent over the full cluster set
+    // (volume and population are min-max scaled across these clusters and no
+    // others, with complaints and development requests scaling against their
+    // own peers), then emitted highest score first, each with the
+    // human-readable explanation of its own numbers. Scores are recomputed per
+    // response, never stored, so a stale build cannot show a ranking that no
+    // longer matches the clusters.
     note('ranking clusters by priority score');
-    const scored = scoreDemandSignals(fused);
+    const scored = scoreDemandSignalsByIntent(fused);
 
     if (!body.dryRun) {
       await civicStore.replaceDemandSignals(fused);

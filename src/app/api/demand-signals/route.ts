@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { civicStore } from '@/lib/store';
-import { toDemandSignalJson } from '@/lib/demandSignals';
-import { scoreDemandSignals } from '@/lib/priorityScore';
+import { filterByIntent, parseIntentParam, toDemandSignalJson } from '@/lib/demandSignals';
+import { scoreDemandSignalsByIntent } from '@/lib/priorityScore';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,14 +12,19 @@ export const dynamic = 'force-dynamic';
  * endpoint resolves the same rows' member complaints so policymakers can trace
  * a recommendation back to the original reports.
  *
+ * `?intent=complaint|development_request|all` (default `all`) filters the
+ * clusters; scores are computed per intent so a filtered view scores
+ * identically to the same rows inside the unfiltered one.
+ *
  * Rows are re-scored on every read (volume and population are min-max scaled
  * over the stored set) and returned highest priority first, so the dashboard
  * always shows a current ranking, even between builds.
  */
 export async function GET(req: NextRequest) {
   try {
-    const signals = await civicStore.listDemandSignals();
-    const scored = scoreDemandSignals(signals);
+    const intent = parseIntentParam(new URL(req.url).searchParams.get('intent'));
+    const signals = filterByIntent(await civicStore.listDemandSignals(), intent);
+    const scored = scoreDemandSignalsByIntent(signals);
 
     return NextResponse.json({
       generated_at: new Date().toISOString(),

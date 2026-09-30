@@ -1,4 +1,4 @@
-import { Category, Issue, IssueStatus, MLAnalysis, ProofOfWork } from './types';
+import { Category, Issue, IssueStatus, MLAnalysis, ProofOfWork, ReportIntent } from './types';
 import { INITIAL_CATEGORIES } from './categories';
 import { departmentForCategory } from './departments';
 import { calculatePriorityScore } from './scoring';
@@ -251,12 +251,18 @@ export function buildSeedIssues(seed = 20260925): Issue[] {
     lat: number,
     lng: number,
     wardNum: number,
-    ageHours: number
+    ageHours: number,
+    overrides?: {
+      intent?: ReportIntent;
+      title?: string;
+      description?: string;
+      status?: IssueStatus;
+    }
   ): void => {
     seq += 1;
     const category = categoryById(profile.categoryId);
     const department = departmentForCategory(category);
-    const status = pickStatus(rand);
+    const status = overrides?.status ?? pickStatus(rand);
     const createdAt = hoursAgo(ageHours);
     const severity = Number(
       Math.min(5, Math.max(1.2, profile.baseSeverity + (rand() - 0.5) * 1.1)).toFixed(1)
@@ -265,7 +271,7 @@ export function buildSeedIssues(seed = 20260925): Issue[] {
     const communityUpvotes = Math.floor(rand() * reportCount * 5);
     const citizenName = `${pick(rand, CITIZEN_FIRST)} ${pick(rand, CITIZEN_LAST)}`;
     const wardId = `${city.wardCode}-${String(wardNum).padStart(3, '0')}`;
-    const title = `${pick(rand, profile.titles)} at ${city.wardName}`;
+    const title = overrides?.title ?? `${pick(rand, profile.titles)} at ${city.wardName}`;
     const priorityScore = calculatePriorityScore({
       mlSeverity: severity,
       reportCount,
@@ -286,8 +292,11 @@ export function buildSeedIssues(seed = 20260925): Issue[] {
       id: `seed-${slugify(city.city)}-${String(seq).padStart(4, '0')}`,
       categoryId: category.id,
       category,
+      intent: overrides?.intent ?? 'complaint',
       title,
-      description: `${title}. Reported by residents of ${city.wardName}, ${city.district}. Repeated complaints from the same stretch have not received a response within the published SLA.`,
+      description:
+        overrides?.description ??
+        `${title}. Reported by residents of ${city.wardName}, ${city.district}. Repeated complaints from the same stretch have not received a response within the published SLA.`,
       latitude: Number(lat.toFixed(6)),
       longitude: Number(lng.toFixed(6)),
       formattedAddress: `${city.wardName}, ${city.district}, ${city.state}`,
@@ -389,6 +398,106 @@ export function buildSeedIssues(seed = 20260925): Issue[] {
         city.lng + Math.cos(angle) * radius,
         300 + Math.floor(rand() * 150),
         24 + Math.floor(rand() * rand() * 2100)
+      );
+    }
+  });
+
+  // --- Development requests -------------------------------------------------
+  // Handcrafted multi-member groups: several citizens in the same district
+  // asking for infrastructure that does not exist yet (a pipeline, a canal, a
+  // bus shelter). Each group shares a district and category, so Stage 1
+  // buckets them together and the near-identical wording lets the embedding
+  // pass merge them into one development demand — the seeded counterpart of
+  // citizens independently filing the same request. Statuses are forced open:
+  // the build scopes its corpus to open issues, so a request seeded as
+  // resolved would never appear in the pipeline.
+  const cityBy = (name: string): SeedCity => {
+    const found = SEED_CITIES.find((c) => c.city === name);
+    if (!found) throw new Error(`Unknown seed city: ${name}`);
+    return found;
+  };
+
+  const DEV_REQUEST_SEEDS: Array<{
+    city: string;
+    categoryId: string;
+    title: string;
+    body: string;
+    count: number;
+    ageHours: number;
+  }> = [
+    {
+      city: 'Visakhapatnam',
+      categoryId: 'cat-water-burst',
+      title: 'Water pipeline extension requested for the Bheemili coastal road',
+      body: 'Residents request that the municipal water supply main be extended along this stretch, which still depends on tanker deliveries. A new pipeline is requested here.',
+      count: 3,
+      ageHours: 40,
+    },
+    {
+      city: 'Visakhapatnam',
+      categoryId: 'cat-others',
+      title: 'Bus shelter requested on the Airport Road service lane',
+      body: 'Commuters wait in the open at this stop with no shade or seating. A bus shelter is requested on the service lane here.',
+      count: 2,
+      ageHours: 70,
+    },
+    {
+      city: 'Vijayawada',
+      categoryId: 'cat-drainage-overflow',
+      title: 'Stormwater drainage canal requested for the Gunadala low-lying belt',
+      body: 'The belt floods every monsoon because there is no stormwater drain to carry the runoff away. A drainage canal is requested for this area.',
+      count: 3,
+      ageHours: 55,
+    },
+    {
+      city: 'Tirupati',
+      categoryId: 'cat-streetlight-outage',
+      title: 'New streetlight connection requested on the Renigunta bypass footpath',
+      body: 'The bypass footpath has no lighting at all after dark. New streetlight connections are requested along this stretch.',
+      count: 3,
+      ageHours: 90,
+    },
+    {
+      city: 'Bengaluru',
+      categoryId: 'cat-road-pothole',
+      title: 'Service road construction requested on the Outer Ring approach',
+      body: 'The approach stretch is an unpaved track with no kerb or footpath. A proper service road is requested for this stretch.',
+      count: 2,
+      ageHours: 120,
+    },
+    {
+      city: 'Hyderabad',
+      categoryId: 'cat-streetlight-outage',
+      title: 'Streetlight poles requested for the Osmanagar service stretch',
+      body: 'This stretch has no poles at all, so vehicles cross unlit at night. Streetlight poles are requested for the stretch here.',
+      count: 2,
+      ageHours: 150,
+    },
+  ];
+
+  const DEV_OPEN_STATUSES: IssueStatus[] = ['reported', 'in_review', 'in_progress'];
+
+  DEV_REQUEST_SEEDS.forEach((request, requestIdx) => {
+    const city = cityBy(request.city);
+    const profile =
+      CATEGORY_PROFILES.find((p) => p.categoryId === request.categoryId) ??
+      CATEGORY_PROFILES[CATEGORY_PROFILES.length - 1];
+    for (let i = 0; i < request.count; i++) {
+      const angle = (i / request.count) * Math.PI * 2;
+      const radius = 0.006 + i * 0.004;
+      emit(
+        city,
+        profile,
+        city.lat + Math.sin(angle) * radius,
+        city.lng + Math.cos(angle) * radius,
+        500 + requestIdx * 10 + i,
+        request.ageHours + i * 6,
+        {
+          intent: 'development_request',
+          title: request.title,
+          description: `${request.title}. ${request.body} Filed by residents of ${city.wardName}, ${city.district}.`,
+          status: DEV_OPEN_STATUSES[i % DEV_OPEN_STATUSES.length],
+        }
       );
     }
   });

@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { AuthUser } from '@/lib/types';
-import { requestOtp, verifyOtp, loginDemo } from '@/lib/session';
-import { X, Smartphone, ShieldCheck, Building2, Loader2, CheckCircle2 } from 'lucide-react';
+import { requestOtp, verifyOtp, loginDemo, signInWithFirebase } from '@/lib/session';
+import { X, Smartphone, ShieldCheck, Building2, Loader2, CheckCircle2, Mail } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -41,6 +41,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthCha
   const [displayName, setDisplayName] = useState('');
   const [otp, setOtp] = useState('');
   const [demoOtp, setDemoOtp] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +53,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthCha
     setDisplayName('');
     setOtp('');
     setDemoOtp(null);
+    setEmail('');
+    setPassword('');
     setError(null);
     setBusy(false);
   };
@@ -92,7 +96,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthCha
   const handleDemoLogin = async (email: string, password: string) => {
     setBusy(true);
     setError(null);
-    const r = await loginDemo(email, password);
+    // Firebase Auth first (the identity provider), then the local password
+    // path as fallback — so the demo keeps working even when Firebase is
+    // unconfigured or its Email/Password provider is disabled.
+    let r = await signInWithFirebase(email, password);
+    if (!r.ok) r = await loginDemo(email, password);
+    setBusy(false);
+    if (!r.ok || !r.user) {
+      setError(r.error || 'Sign-in failed.');
+      return;
+    }
+    reset();
+    onAuthChange(r.user);
+  };
+
+  const handleEmailLogin = async () => {
+    if (!email.includes('@') || password.length < 4) {
+      setError('Enter a valid email and password (4+ characters).');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    // Implicit sign-up: a brand-new email/password pair creates the account.
+    const r = await signInWithFirebase(email, password, displayName);
     setBusy(false);
     if (!r.ok || !r.user) {
       setError(r.error || 'Sign-in failed.');
@@ -235,6 +261,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthCha
                   </button>
                 </div>
               )}
+
+              {/* Email sign-in through Firebase Auth — implicit sign-up for a
+                  brand-new address, and a second way in when SMS isn't handy. */}
+              <div className="pt-1">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                  <span>or continue with email</span>
+                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                </div>
+                <div className="mt-3 space-y-2.5">
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    className="w-full py-3 px-3.5 text-sm rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 outline-none focus:border-emerald-500 transition"
+                  />
+                  <input
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    type="password"
+                    autoComplete={email ? 'current-password' : 'new-password'}
+                    placeholder="Password (new addresses are registered automatically)"
+                    className="w-full py-3 px-3.5 text-sm rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 outline-none focus:border-emerald-500 transition"
+                  />
+                  <button
+                    onClick={handleEmailLogin}
+                    disabled={busy}
+                    className="w-full py-3 rounded-2xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-sm font-bold transition active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
+                  >
+                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                    <span>Sign in / register</span>
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="mt-5 space-y-2.5">
